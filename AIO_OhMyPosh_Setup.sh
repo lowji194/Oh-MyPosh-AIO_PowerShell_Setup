@@ -396,27 +396,97 @@ echo ""
 #  10. TAI TOAN BO BO THEME CHO OH MY POSH (khong chi Dracula)
 #     De co the dung lenh "theme <ten>" / "themes" doi qua lai
 #     giua cac theme MA KHONG CAN MANG sau khi da tai ve 1 lan.
+#
+#     >>> DA SUA LOI (so voi ban goc) <<<
+#     Loi cu: chi can >0 file .omp.json da co san la BO QUA tai lai,
+#     nen neu lan tai truoc bi dut/loi (chi giai nen duoc 1 file),
+#     script se KHONG BAO GIO tai lai nua, khien lenh "themes" chi
+#     hien mai 1 theme "dracula".
+#     Sua: (1) nang nguong kiem tra "da co du theme" len > 50 file
+#          (bo theme that co ~150+ theme); (2) kiem tra dung luong
+#          file zip tai ve truoc khi giai nen; (3) tu dong retry
+#          toi da 3 lan neu tai/giai nen loi; (4) sau khi giai nen
+#          xong, dem lai so theme thuc te va canh bao ro rang neu
+#          van thieu, thay vi am tham bo qua.
 # ============================================================
 
 log_info "[10/12] Dang tai toan bo bo theme cho Oh My Posh..."
 THEME_DIR="$HOME/.poshthemes"
 mkdir -p "$THEME_DIR"
-DRACULA_THEME_PATH="$THEME_DIR/dracula.omp.json"
+
+# Nguong toi thieu de coi la "da tai du bo theme" (bo that co ~150+ theme,
+# dat 50 la du an toan de phan biet voi truong hop tai loi chi ra 1-2 file)
+MIN_THEME_COUNT=50
+# Dung luong toi thieu hop ly cho themes.zip (tinh bang byte, ~500KB)
+MIN_ZIP_BYTES=500000
 
 EXISTING_THEME_COUNT="$(find "$THEME_DIR" -maxdepth 1 -name '*.omp.json' 2>/dev/null | wc -l)"
 
-if [[ "$EXISTING_THEME_COUNT" -gt 0 ]]; then
+download_and_extract_themes() {
+    local attempt=1
+    local max_attempts=3
+    local tmp_dir tmp_zip zip_size
+
+    while [[ $attempt -le $max_attempts ]]; do
+        log_warn "      -> Dang tai bo theme (lan thu $attempt/$max_attempts)..."
+        tmp_dir="$(mktemp -d)"
+        tmp_zip="$tmp_dir/themes.zip"
+
+        if curl -fL --retry 2 --retry-delay 2 -o "$tmp_zip" \
+             "https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip" 2>/dev/null; then
+
+            zip_size="$(stat -c%s "$tmp_zip" 2>/dev/null || stat -f%z "$tmp_zip" 2>/dev/null || echo 0)"
+
+            if [[ "$zip_size" -ge "$MIN_ZIP_BYTES" ]]; then
+                # Xoa theme cu (neu co, vi co the dang bi thieu/loi) truoc khi giai nen lai cho sach
+                rm -f "$THEME_DIR"/*.omp.json 2>/dev/null
+
+                if unzip -oq "$tmp_zip" -d "$THEME_DIR" 2>/dev/null; then
+                    chmod u+rw "$THEME_DIR"/*.omp.json 2>/dev/null
+                    local new_count
+                    new_count="$(find "$THEME_DIR" -maxdepth 1 -name '*.omp.json' 2>/dev/null | wc -l)"
+
+                    if [[ "$new_count" -ge "$MIN_THEME_COUNT" ]]; then
+                        rm -rf "$tmp_dir"
+                        log_ok "Hoan tat. Da tai $new_count theme vao: $THEME_DIR"
+                        return 0
+                    else
+                        log_warn "      -> Giai nen xong nhung chi co $new_count theme (ky vong >= $MIN_THEME_COUNT). File zip co the bi loi, se thu lai..."
+                    fi
+                else
+                    log_warn "      -> Giai nen that bai (file zip co the bi hong). Se thu lai..."
+                fi
+            else
+                log_warn "      -> File zip tai ve qua nho (${zip_size} byte, ky vong >= ${MIN_ZIP_BYTES} byte). Co the bi dut mang. Se thu lai..."
+            fi
+        else
+            log_warn "      -> curl bao loi khi tai themes.zip. Se thu lai..."
+        fi
+
+        rm -rf "$tmp_dir"
+        attempt=$((attempt + 1))
+        [[ $attempt -le $max_attempts ]] && sleep 2
+    done
+
+    return 1
+}
+
+if [[ "$EXISTING_THEME_COUNT" -ge "$MIN_THEME_COUNT" ]]; then
     log_ok "Da co san $EXISTING_THEME_COUNT theme tai $THEME_DIR, bo qua tai lai."
 else
-    TMP_THEMES_ZIP="$(mktemp -d)/themes.zip"
-    if curl -fsSL -o "$TMP_THEMES_ZIP" "https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip" && \
-       unzip -oq "$TMP_THEMES_ZIP" -d "$THEME_DIR"; then
-        chmod u+rw "$THEME_DIR"/*.omp.json 2>/dev/null
-        NEW_THEME_COUNT="$(find "$THEME_DIR" -maxdepth 1 -name '*.omp.json' 2>/dev/null | wc -l)"
-        log_ok "Hoan tat. Da tai $NEW_THEME_COUNT theme vao: $THEME_DIR"
+    if [[ "$EXISTING_THEME_COUNT" -gt 0 ]]; then
+        log_warn "      -> Phat hien $EXISTING_THEME_COUNT theme (qua it, co the do lan truoc tai loi/dut). Se tai lai toan bo."
+    fi
+
+    if download_and_extract_themes; then
+        :
     else
-        log_err "      -> Loi khi tai bo theme. Se dung cau hinh du phong (tai qua mang) trong file rc."
-        log_warn "         Ban co the tai thu cong tai: https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip"
+        FINAL_COUNT="$(find "$THEME_DIR" -maxdepth 1 -name '*.omp.json' 2>/dev/null | wc -l)"
+        log_err "      -> Tai bo theme that bai sau nhieu lan thu. Hien dang co $FINAL_COUNT theme tai $THEME_DIR."
+        log_warn "         Ban co the tai thu cong bang lenh:"
+        log_warn "           curl -fL -o /tmp/themes.zip https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip"
+        log_warn "           unzip -oq /tmp/themes.zip -d ~/.poshthemes"
+        log_warn "         Neu van khong tai duoc, kiem tra ket noi mang / firewall toi github.com."
     fi
 fi
 echo ""
