@@ -85,29 +85,46 @@ try {
     }
 
     if ($needDownloadThemes) {
-        Write-Host "      -> Chua co theme local, dang tai bo theme tu GitHub release..." -ForegroundColor Yellow
+    $maxAttempts = 3
+    $success = $false
+
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        Write-Host "      -> Dang tai bo theme (lan thu $attempt/$maxAttempts)..." -ForegroundColor Yellow
         try {
             New-Item -ItemType Directory -Force -Path $poshThemesPath | Out-Null
             $themesZip = Join-Path $env:TEMP "oh-my-posh-themes.zip"
             Invoke-WebRequest -Uri "https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip" -OutFile $themesZip -UseBasicParsing
+
             $zipSize = (Get-Item $themesZip).Length
             if ($zipSize -lt 500000) {
                 throw "File zip qua nho ($zipSize byte), co the tai bi loi/dut mang."
             }
+
             Get-ChildItem -Path $poshThemesPath -Filter '*.omp.json' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
             Expand-Archive -Path $themesZip -DestinationPath $poshThemesPath -Force
             Remove-Item $themesZip -Force -ErrorAction SilentlyContinue
 
             $downloadedCount = (Get-ChildItem -Path $poshThemesPath -Filter '*.omp.json' -ErrorAction SilentlyContinue | Measure-Object).Count
-            if ($downloadedCount -gt 0) {
+            if ($downloadedCount -ge 50) {
                 Write-Host "      -> Da tai va giai nen thanh cong $downloadedCount theme." -ForegroundColor DarkGreen
+                $success = $true
+                break
             } else {
-                Write-Host "      -> Da tai xong nhung khong thay file theme nao, kiem tra lai thu cong." -ForegroundColor Yellow
+                Write-Host "      -> Chi co $downloadedCount theme (ky vong >= 50). Se thu lai..." -ForegroundColor Yellow
             }
         } catch {
-            Write-Host "      -> Loi khi tai bo theme: $_" -ForegroundColor Red
-            Write-Host "         Ban co the tai thu cong tai: https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip" -ForegroundColor Yellow
+            Write-Host "      -> Loi lan $attempt : $_" -ForegroundColor Red
         }
+
+        if ($attempt -lt $maxAttempts) {
+            Start-Sleep -Seconds 2
+        }
+    }
+
+    if (-not $success) {
+        Write-Host "      -> Tai bo theme that bai sau $maxAttempts lan thu." -ForegroundColor Red
+        Write-Host "         Ban co the tai thu cong tai: https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip" -ForegroundColor Yellow
+    }
     }
 
     if (Test-Path $poshThemesPath) {
