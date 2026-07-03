@@ -78,7 +78,7 @@ try {
     $needDownloadThemes = $true
     if (Test-Path $poshThemesPath) {
         $existingThemeCount = (Get-ChildItem -Path $poshThemesPath -Filter '*.omp.json' -ErrorAction SilentlyContinue | Measure-Object).Count
-        if ($existingThemeCount -gt 0) {
+        if ($existingThemeCount -ge 50) {
             $needDownloadThemes = $false
             Write-Host "      -> Da co san $existingThemeCount theme tai $poshThemesPath" -ForegroundColor DarkGreen
         }
