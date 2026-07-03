@@ -11,7 +11,10 @@
 #   - fzf (fuzzy finder cho lich su lenh & file)
 #   - eza (thay the "ls" hien dai, co icon)
 #   - bat (thay the "cat" co syntax highlight)
-#   - File ~/.bashrc (hoac ~/.zshrc neu dang dung zsh) duoc cau hinh tu dong
+#   - File ~/.bashrc VA ~/.zshrc (neu co zsh) deu duoc cau hinh tu dong
+#   - Dong bo tu dong cac cau hinh cua nvm/pyenv/sdkman/cargo/go/...
+#     tu ~/.bashrc sang ~/.zshrc (va nguoc lai neu can), tranh phai
+#     copy tay moi khi cai them cong cu moi
 #
 # Yeu cau: Ubuntu/Debian, co quyen sudo, ket noi internet
 # Cach chay:
@@ -74,14 +77,10 @@ if ! command -v sudo >/dev/null 2>&1 && [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# Xac dinh shell dang dung de cau hinh dung file rc
+# Xac dinh shell dang dung (chi de hien thi thong tin, vi ban than script
+# se cau hinh cho CA HAI shell ben duoi neu co)
 CURRENT_SHELL="$(basename "$SHELL")"
-if [[ "$CURRENT_SHELL" == "zsh" ]]; then
-    RC_FILE="$HOME/.zshrc"
-else
-    RC_FILE="$HOME/.bashrc"
-fi
-log_info "Shell dang dung: $CURRENT_SHELL  ->  se cau hinh vao: $RC_FILE"
+log_info "Shell dang dung: $CURRENT_SHELL"
 echo ""
 
 SUDO="sudo"
@@ -91,7 +90,7 @@ SUDO="sudo"
 #  0. CAP NHAT GOI HE THONG & CAI DEPENDENCY CO BAN
 # ============================================================
 
-log_info "[0/8] Dang cap nhat danh sach goi va cai dependency co ban (curl, unzip, fontconfig, git)..."
+log_info "[0/9] Dang cap nhat danh sach goi va cai dependency co ban (curl, unzip, fontconfig, git)..."
 if $SUDO apt-get update -y >/dev/null 2>&1 && \
    $SUDO apt-get install -y curl unzip fontconfig git ca-certificates >/dev/null 2>&1; then
     log_ok "Hoan tat."
@@ -104,7 +103,7 @@ echo ""
 #  1. CAI OH MY POSH
 # ============================================================
 
-log_info "[1/8] Dang cai dat Oh My Posh..."
+log_info "[1/9] Dang cai dat Oh My Posh..."
 if command -v oh-my-posh >/dev/null 2>&1; then
     log_ok "Oh My Posh da duoc cai san, bo qua."
 else
@@ -123,7 +122,7 @@ echo ""
 #  2. CAI NERD FONT (CascadiaCode)
 # ============================================================
 
-log_info "[2/8] Dang cai dat Nerd Font (CascadiaCode)..."
+log_info "[2/9] Dang cai dat Nerd Font (CascadiaCode)..."
 FONT_DIR="$HOME/.local/share/fonts"
 mkdir -p "$FONT_DIR"
 
@@ -145,7 +144,7 @@ echo ""
 #  3. CAI zoxide (nhay thu muc thong minh)
 # ============================================================
 
-log_info "[3/8] Dang cai dat zoxide..."
+log_info "[3/9] Dang cai dat zoxide..."
 if command -v zoxide >/dev/null 2>&1; then
     log_ok "zoxide da duoc cai san, bo qua."
 else
@@ -162,14 +161,15 @@ echo ""
 #  4. CAI fzf (fuzzy finder)
 # ============================================================
 
-log_info "[4/8] Dang cai dat fzf (fuzzy finder)..."
+log_info "[4/9] Dang cai dat fzf (fuzzy finder)..."
 if command -v fzf >/dev/null 2>&1; then
     log_ok "fzf da duoc cai san, bo qua."
 else
     if [[ ! -d "$HOME/.fzf" ]]; then
         git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME/.fzf" >/dev/null 2>&1
     fi
-    if "$HOME/.fzf/install" --key-bindings --completion --no-update-rc --no-bash --no-zsh >/dev/null 2>&1; then
+    # Cai key-bindings + completion cho CA bash lan zsh (bo --no-bash/--no-zsh)
+    if "$HOME/.fzf/install" --key-bindings --completion --no-update-rc >/dev/null 2>&1; then
         log_ok "Hoan tat. (Ctrl+T tim file, Ctrl+R tim lich su lenh)"
     else
         log_err "      -> Loi khi cai fzf."
@@ -181,7 +181,7 @@ echo ""
 #  5. CAI eza (thay the ls hien dai)
 # ============================================================
 
-log_info "[5/8] Dang cai dat eza (ls hien dai, co icon)..."
+log_info "[5/9] Dang cai dat eza (ls hien dai, co icon)..."
 if command -v eza >/dev/null 2>&1; then
     log_ok "eza da duoc cai san, bo qua."
 else
@@ -197,7 +197,7 @@ echo ""
 #  6. CAI bat (thay the cat co syntax highlight)
 # ============================================================
 
-log_info "[6/8] Dang cai dat bat (cat co syntax highlight)..."
+log_info "[6/9] Dang cai dat bat (cat co syntax highlight)..."
 if command -v bat >/dev/null 2>&1 || command -v batcat >/dev/null 2>&1; then
     log_ok "bat da duoc cai san, bo qua."
 else
@@ -213,7 +213,7 @@ echo ""
 #  7. TAI THEME DRACULA CHO OH MY POSH
 # ============================================================
 
-log_info "[7/8] Dang tai theme Dracula cho Oh My Posh..."
+log_info "[7/9] Dang tai theme Dracula cho Oh My Posh..."
 THEME_DIR="$HOME/.poshthemes"
 mkdir -p "$THEME_DIR"
 DRACULA_THEME_PATH="$THEME_DIR/dracula.omp.json"
@@ -226,26 +226,30 @@ fi
 echo ""
 
 # ============================================================
-#  8. CAU HINH FILE RC (~/.bashrc HOAC ~/.zshrc)
+#  8. CAU HINH FILE RC CHO CA ~/.bashrc VA ~/.zshrc
+#     (khong con phu thuoc vao shell hien tai nua)
 # ============================================================
-
-log_info "[8/8] Dang cau hinh $RC_FILE (theme: Dracula)..."
-
-if [[ -f "$RC_FILE" ]]; then
-    BACKUP_PATH="${RC_FILE}.backup_$(date +%Y%m%d_%H%M%S)"
-    cp "$RC_FILE" "$BACKUP_PATH"
-    log_ok "Da sao luu file cu vao: $BACKUP_PATH"
-fi
 
 MARKER_START="# >>> AIO OhMyPosh Setup >>>"
 MARKER_END="# <<< AIO OhMyPosh Setup <<<"
 
-# Xoa block cu (neu chay lai script) truoc khi chen block moi
-if [[ -f "$RC_FILE" ]] && grep -qF "$MARKER_START" "$RC_FILE"; then
-    sed -i "/$MARKER_START/,/$MARKER_END/d" "$RC_FILE"
-fi
+configure_rc_file() {
+    local rc_file="$1"
+    local shell_name="$2"   # "bash" hoac "zsh"
 
-cat >> "$RC_FILE" <<EOF
+    log_info "[8/9] Dang cau hinh $rc_file (shell: $shell_name, theme: Dracula)..."
+
+    touch "$rc_file"
+    local backup_path="${rc_file}.backup_$(date +%Y%m%d_%H%M%S)"
+    cp "$rc_file" "$backup_path"
+    log_ok "Da sao luu file cu vao: $backup_path"
+
+    # Xoa block cu (neu chay lai script) truoc khi chen block moi
+    if grep -qF "$MARKER_START" "$rc_file"; then
+        sed -i "/$MARKER_START/,/$MARKER_END/d" "$rc_file"
+    fi
+
+    cat >> "$rc_file" <<EOF
 $MARKER_START
 # ------------------------------------------------------------
 # Cau hinh tu dong boi AIO_OhMyPosh_Setup.sh
@@ -257,19 +261,19 @@ export PATH="\$HOME/.local/bin:\$PATH"
 # --- Oh My Posh (theme prompt: Dracula) ---
 if command -v oh-my-posh >/dev/null 2>&1; then
     if [[ -f "$DRACULA_THEME_PATH" ]]; then
-        eval "\$(oh-my-posh init ${CURRENT_SHELL} --config '$DRACULA_THEME_PATH')"
+        eval "\$(oh-my-posh init ${shell_name} --config '$DRACULA_THEME_PATH')"
     else
-        eval "\$(oh-my-posh init ${CURRENT_SHELL} --config 'https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/dracula.omp.json')"
+        eval "\$(oh-my-posh init ${shell_name} --config 'https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/dracula.omp.json')"
     fi
 fi
 
 # --- zoxide (nhay thu muc thong minh: dung "z ten-thu-muc") ---
 if command -v zoxide >/dev/null 2>&1; then
-    eval "\$(zoxide init ${CURRENT_SHELL})"
+    eval "\$(zoxide init ${shell_name})"
 fi
 
 # --- fzf (fuzzy finder: Ctrl+T tim file, Ctrl+R tim lich su lenh) ---
-[[ -f "\$HOME/.fzf.${CURRENT_SHELL}" ]] && source "\$HOME/.fzf.${CURRENT_SHELL}"
+[[ -f "\$HOME/.fzf.${shell_name}" ]] && source "\$HOME/.fzf.${shell_name}"
 
 # --- Alias tien ich ---
 if command -v eza >/dev/null 2>&1; then
@@ -287,8 +291,22 @@ alias ...='cd ../..'
 $MARKER_END
 EOF
 
-log_ok "Hoan tat. Da cau hinh: $RC_FILE"
+    log_ok "Hoan tat. Da cau hinh: $rc_file"
+}
+
+# Luon cau hinh ~/.bashrc
+configure_rc_file "$HOME/.bashrc" "bash"
+
+# Neu da co zsh (hoac se cai o buoc sau), cau hinh luon ~/.zshrc
+if command -v zsh >/dev/null 2>&1; then
+    configure_rc_file "$HOME/.zshrc" "zsh"
+else
+    log_warn "      -> Chua phat hien zsh tren he thong nen tam thoi bo qua ~/.zshrc."
+    log_warn "         Neu ban cai zsh sau nay, hay chay lai script nay de tu dong cau hinh ~/.zshrc."
+fi
 echo ""
+
+PLACEHOLDER_STEP9
 
 # ============================================================
 #  KET THUC
@@ -301,12 +319,20 @@ log_step "====================================================="
 echo ""
 log_warn "CAC BUOC TIEP THEO (BAT BUOC):"
 echo -e "${WHITE}  1. Chay lenh sau de nap lai cau hinh (hoac dong terminal va mo lai):${NC}"
-echo -e "${WHITE}     source $RC_FILE${NC}"
+echo -e "${WHITE}     source ~/.bashrc   # neu dang dung bash${NC}"
+echo -e "${WHITE}     source ~/.zshrc    # neu dang dung zsh${NC}"
 echo -e "${WHITE}  2. Doi Font cua terminal (GNOME Terminal / Windows Terminal WSL / ...) thanh:${NC}"
 echo -e "${WHITE}     'CaskaydiaCove Nerd Font'${NC}"
 echo -e "${WHITE}  3. (Tuy chon) Neu muon doi theme khac Dracula, sua duong dan trong dong 'oh-my-posh init'${NC}"
-echo -e "${WHITE}     trong file $RC_FILE sang theme khac.${NC}"
+echo -e "${WHITE}     trong ca ~/.bashrc va ~/.zshrc sang theme khac.${NC}"
 echo -e "${WHITE}     Xem danh sach theme: https://ohmyposh.dev/docs/themes${NC}"
+echo ""
+log_warn "VE VIEC DONG BO CONG CU (nvm/pyenv/sdkman/cargo/go/...):"
+echo -e "${WHITE}  - Tu nay ve sau, moi khi ban cai them 1 cong cu moi (vi du: cai nvm de dung${NC}"
+echo -e "${WHITE}    npm/nodejs) va no chi ghi cau hinh vao ~/.bashrc, ban CHI CAN chay lai:${NC}"
+echo -e "${WHITE}       ./AIO_OhMyPosh_Setup.sh${NC}"
+echo -e "${WHITE}    Script se tu dong phat hien va dong bo cau hinh do sang ~/.zshrc (va nguoc lai),${NC}"
+echo -e "${WHITE}    khong can copy tay nua.${NC}"
 echo ""
 log_warn "GOI Y SU DUNG NHANH:"
 echo -e "${WHITE}  - Ctrl+R : tim lich su lenh bang fuzzy search (fzf)${NC}"
