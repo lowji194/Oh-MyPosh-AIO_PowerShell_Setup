@@ -94,6 +94,7 @@ try {
             if ($zipSize -lt 500000) {
                 throw "File zip qua nho ($zipSize byte), co the tai bi loi/dut mang."
             }
+            Get-ChildItem -Path $poshThemesPath -Filter '*.omp.json' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
             Expand-Archive -Path $themesZip -DestinationPath $poshThemesPath -Force
             Remove-Item $themesZip -Force -ErrorAction SilentlyContinue
 
