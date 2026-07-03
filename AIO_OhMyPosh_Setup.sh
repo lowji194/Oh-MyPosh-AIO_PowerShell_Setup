@@ -525,9 +525,17 @@ $MARKER_START
 export PATH="\$HOME/.local/bin:\$PATH"
 
 # --- Oh My Posh: bien luu theme dang dung (mac dinh: dracula) ---
+# Luu ten theme vao 1 FILE TRANG THAI RIENG (khong dung sed sua truc tiep
+# vao file rc nua, vi sed qua nhieu lop escape qua heredoc rat de vo).
 export POSH_THEME_DIR="$THEME_DIR"
+POSH_THEME_STATE_FILE="\$HOME/.config/posh_current_theme"
+mkdir -p "\$(dirname "\$POSH_THEME_STATE_FILE")" 2>/dev/null
+if [[ -f "\$POSH_THEME_STATE_FILE" ]]; then
+    POSH_CURRENT_THEME="\$(cat "\$POSH_THEME_STATE_FILE" 2>/dev/null)"
+fi
 : "\${POSH_CURRENT_THEME:=dracula}"
 export POSH_CURRENT_THEME
+export POSH_THEME_STATE_FILE
 
 # --- Oh My Posh (theme prompt, uu tien load LOCAL theo POSH_CURRENT_THEME) ---
 if command -v oh-my-posh >/dev/null 2>&1; then
@@ -620,10 +628,17 @@ theme() {
     eval "\$(oh-my-posh init ${shell_name} --config "\$theme_file")"
     export POSH_CURRENT_THEME="\$name"
 
-    # Luu lai vinh vien: cap nhat dong POSH_CURRENT_THEME trong chinh file rc nay
-    sed -i "s/^: \\\"\\\${POSH_CURRENT_THEME:=.*}\\\"\$/: \\\"\\\${POSH_CURRENT_THEME:=\$name}\\\"/" "$rc_file" 2>/dev/null
+    # Luu lai vinh vien: ghi ten theme vao FILE TRANG THAI RIENG
+    # (don gian, khong dinh loi escape nhu cach dung sed sua truc tiep file rc)
+    mkdir -p "\$(dirname "\$POSH_THEME_STATE_FILE")" 2>/dev/null
+    echo "\$name" > "\$POSH_THEME_STATE_FILE" 2>/dev/null
 
-    echo "Da doi sang theme: \$name (da luu, lan sau mo terminal se tu dong dung theme nay)"
+    if [[ -s "\$POSH_THEME_STATE_FILE" ]] && [[ "\$(cat "\$POSH_THEME_STATE_FILE")" == "\$name" ]]; then
+        echo "Da doi sang theme: \$name (da luu, lan sau mo terminal se tu dong dung theme nay)"
+    else
+        echo "Da doi theme cho phien nay, NHUNG luu that bai (khong ghi duoc vao \$POSH_THEME_STATE_FILE)."
+        echo "Kiem tra quyen ghi thu muc \$(dirname "\$POSH_THEME_STATE_FILE")."
+    fi
 }
 
 # Tab-completion cho lenh "theme" (chi ap dung khi dang o bash)
