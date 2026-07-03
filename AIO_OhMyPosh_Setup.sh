@@ -6,7 +6,8 @@
 # (Da kiem tra tuong thich Ubuntu 22.04 arm64 / amd64)
 # ------------------------------------------------------------
 # Tu dong cai dat va cau hinh:
-#   - Oh My Posh (theme prompt mac dinh: Dracula)
+#   - Oh My Posh (theme prompt mac dinh: Dracula, kem toan bo
+#     bo theme local + lenh nhanh doi theme: theme / themes)
 #   - Nerd Font (CascadiaCode)
 #   - zoxide (nhay thu muc thong minh)
 #   - fzf (fuzzy finder cho lich su lenh & file)
@@ -392,18 +393,31 @@ export PATH="$HOME/.local/bin:$PATH"
 echo ""
 
 # ============================================================
-#  10. TAI THEME DRACULA CHO OH MY POSH
+#  10. TAI TOAN BO BO THEME CHO OH MY POSH (khong chi Dracula)
+#     De co the dung lenh "theme <ten>" / "themes" doi qua lai
+#     giua cac theme MA KHONG CAN MANG sau khi da tai ve 1 lan.
 # ============================================================
 
-log_info "[10/12] Dang tai theme Dracula cho Oh My Posh..."
+log_info "[10/12] Dang tai toan bo bo theme cho Oh My Posh..."
 THEME_DIR="$HOME/.poshthemes"
 mkdir -p "$THEME_DIR"
 DRACULA_THEME_PATH="$THEME_DIR/dracula.omp.json"
 
-if curl -fsSL -o "$DRACULA_THEME_PATH" "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/dracula.omp.json"; then
-    log_ok "Hoan tat. Theme luu tai: $DRACULA_THEME_PATH"
+EXISTING_THEME_COUNT="$(find "$THEME_DIR" -maxdepth 1 -name '*.omp.json' 2>/dev/null | wc -l)"
+
+if [[ "$EXISTING_THEME_COUNT" -gt 0 ]]; then
+    log_ok "Da co san $EXISTING_THEME_COUNT theme tai $THEME_DIR, bo qua tai lai."
 else
-    log_err "      -> Loi khi tai theme Dracula. Se dung cau hinh du phong trong file rc."
+    TMP_THEMES_ZIP="$(mktemp -d)/themes.zip"
+    if curl -fsSL -o "$TMP_THEMES_ZIP" "https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip" && \
+       unzip -oq "$TMP_THEMES_ZIP" -d "$THEME_DIR"; then
+        chmod u+rw "$THEME_DIR"/*.omp.json 2>/dev/null
+        NEW_THEME_COUNT="$(find "$THEME_DIR" -maxdepth 1 -name '*.omp.json' 2>/dev/null | wc -l)"
+        log_ok "Hoan tat. Da tai $NEW_THEME_COUNT theme vao: $THEME_DIR"
+    else
+        log_err "      -> Loi khi tai bo theme. Se dung cau hinh du phong (tai qua mang) trong file rc."
+        log_warn "         Ban co the tai thu cong tai: https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip"
+    fi
 fi
 echo ""
 
@@ -440,13 +454,20 @@ $MARKER_START
 # --- PATH bo sung ---
 export PATH="\$HOME/.local/bin:\$PATH"
 
-# --- Oh My Posh (theme prompt: Dracula) ---
+# --- Oh My Posh: bien luu theme dang dung (mac dinh: dracula) ---
+export POSH_THEME_DIR="$THEME_DIR"
+: "\${POSH_CURRENT_THEME:=dracula}"
+export POSH_CURRENT_THEME
+
+# --- Oh My Posh (theme prompt, uu tien load LOCAL theo POSH_CURRENT_THEME) ---
 if command -v oh-my-posh >/dev/null 2>&1; then
-    if [[ -f "$DRACULA_THEME_PATH" ]]; then
-        eval "\$(oh-my-posh init ${shell_name} --config '$DRACULA_THEME_PATH')"
+    __posh_theme_file="\$POSH_THEME_DIR/\${POSH_CURRENT_THEME}.omp.json"
+    if [[ -f "\$__posh_theme_file" ]]; then
+        eval "\$(oh-my-posh init ${shell_name} --config "\$__posh_theme_file")"
     else
         eval "\$(oh-my-posh init ${shell_name} --config 'https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/dracula.omp.json')"
     fi
+    unset __posh_theme_file
 fi
 
 # --- zoxide (nhay thu muc thong minh: dung "z ten-thu-muc") ---
@@ -490,6 +511,71 @@ fi
 
 alias ..='cd ..'
 alias ...='cd ../..'
+
+# ------------------------------------------------------------
+#  LENH NHANH DOI THEME OH MY POSH (theme / themes)
+# ------------------------------------------------------------
+
+# Xem truoc TAT CA theme ngay trong terminal (in mau thuc te tung theme)
+themes() {
+    if [[ ! -d "\$POSH_THEME_DIR" ]]; then
+        echo "Khong tim thay thu muc theme: \$POSH_THEME_DIR"
+        return 1
+    fi
+    local f name
+    for f in "\$POSH_THEME_DIR"/*.omp.json; do
+        [[ -e "\$f" ]] || continue
+        name="\$(basename "\$f" .omp.json)"
+        printf '\n\033[0;36m%s\033[0m\n' "\$name"
+        oh-my-posh print primary --config "\$f"
+    done
+    printf '\nDung lenh: theme <ten-theme>  de doi theme (vi du: theme jandedobbeleer)\n'
+}
+
+# Doi theme ngay lap tuc + luu lai vinh vien cho lan mo terminal sau
+theme() {
+    if [[ -z "\${1:-}" ]]; then
+        echo "Cach dung: theme <ten-theme>   (go 'themes' de xem danh sach)"
+        return 1
+    fi
+    local name="\$1"
+    local theme_file="\$POSH_THEME_DIR/\${name}.omp.json"
+
+    if [[ ! -f "\$theme_file" ]]; then
+        echo "Khong tim thay theme '\$name'."
+        echo "Go 'themes' de xem danh sach va preview cac theme dang co."
+        return 1
+    fi
+
+    eval "\$(oh-my-posh init ${shell_name} --config "\$theme_file")"
+    export POSH_CURRENT_THEME="\$name"
+
+    # Luu lai vinh vien: cap nhat dong POSH_CURRENT_THEME trong chinh file rc nay
+    sed -i "s/^: \\\"\\\${POSH_CURRENT_THEME:=.*}\\\"\$/: \\\"\\\${POSH_CURRENT_THEME:=\$name}\\\"/" "$rc_file" 2>/dev/null
+
+    echo "Da doi sang theme: \$name (da luu, lan sau mo terminal se tu dong dung theme nay)"
+}
+
+# Tab-completion cho lenh "theme" (chi ap dung khi dang o bash)
+if [[ -n "\${BASH_VERSION:-}" ]]; then
+    _theme_completions() {
+        local cur="\${COMP_WORDS[COMP_CWORD]}"
+        local opts
+        opts="\$(find "\$POSH_THEME_DIR" -maxdepth 1 -name '*.omp.json' -printf '%f\n' 2>/dev/null | sed 's/\.omp\.json\$//')"
+        COMPREPLY=(\$(compgen -W "\$opts" -- "\$cur"))
+    }
+    complete -F _theme_completions theme
+fi
+
+# Tab-completion cho lenh "theme" (chi ap dung khi dang o zsh)
+if [[ -n "\${ZSH_VERSION:-}" ]]; then
+    _theme_zsh_completions() {
+        local -a themes_list
+        themes_list=(\$(find "\$POSH_THEME_DIR" -maxdepth 1 -name '*.omp.json' -exec basename {} .omp.json \;))
+        compadd -a themes_list
+    }
+    compdef _theme_zsh_completions theme 2>/dev/null
+fi
 
 $MARKER_END
 EOF
@@ -582,9 +668,6 @@ echo -e "${WHITE}     source ~/.bashrc   # neu dang dung bash${NC}"
 echo -e "${WHITE}     source ~/.zshrc    # neu dang dung zsh${NC}"
 echo -e "${WHITE}  2. Doi Font cua terminal (GNOME Terminal / Windows Terminal WSL / ...) thanh:${NC}"
 echo -e "${WHITE}     'CaskaydiaCove Nerd Font'${NC}"
-echo -e "${WHITE}  3. (Tuy chon) Neu muon doi theme khac Dracula, sua duong dan trong dong 'oh-my-posh init'${NC}"
-echo -e "${WHITE}     trong ca ~/.bashrc va ~/.zshrc sang theme khac.${NC}"
-echo -e "${WHITE}     Xem danh sach theme: https://ohmyposh.dev/docs/themes${NC}"
 echo ""
 log_warn "VE VIEC DONG BO CONG CU (nvm/pyenv/sdkman/cargo/go/...):"
 echo -e "${WHITE}  - Tu nay ve sau, moi khi ban cai them 1 cong cu moi (vi du: cai nvm de dung${NC}"
@@ -602,4 +685,6 @@ echo -e "${WHITE}  - cat ten-file : xem file voi syntax highlight bang bat/batca
 echo -e "${WHITE}  - find ten     : tim file/thu muc nhanh bang fd${NC}"
 echo -e "${WHITE}  - top          : mo trinh giam sat he thong bang btop${NC}"
 echo -e "${WHITE}  - lg           : mo lazygit (TUI quan ly Git) trong thu muc hien tai${NC}"
+echo -e "${WHITE}  - themes       : xem truoc TAT CA theme ngay trong terminal${NC}"
+echo -e "${WHITE}  - theme ten    : doi theme ngay lap tuc + tu luu lai (vi du: theme jandedobbeleer)${NC}"
 echo ""
