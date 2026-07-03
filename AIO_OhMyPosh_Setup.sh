@@ -1,467 +1,444 @@
-#Requires -Version 5.1
-<#
-.SYNOPSIS
-    Script cai dat AIO (All-In-One) lam dep PowerShell 7 + Windows Terminal
-.DESCRIPTION
-    Tu dong cai dat va cau hinh:
-    - PowerShell 7 (tu dong tai ban moi nhat neu chua co, qua winget hoac
-      tai truc tiep MSI tu GitHub neu winget khong co san)
-    - Thiet lap CMD.exe tu dong mo PowerShell 7 khi khoi dong (AutoRun)
-    - Gan file .ps1 mo mac dinh bang PowerShell 7 (pwsh.exe)
-    - Oh My Posh (theme prompt mac dinh: Dracula, load THEME LOCAL, khong can mang)
-    - Nerd Font (CascadiaCode)
-    - PSReadLine (autocomplete + syntax highlight)
-    - Terminal-Icons (icon cho file/folder)
-    - zoxide (nhay thu muc thong minh)
-    - posh-git (trang thai Git tren prompt + tab-completion)
-    - PSFzf (fuzzy finder cho lich su lenh & file)
-    - (Tuy chon) ImportExcel, Pester, PSScriptAnalyzer, SecretManagement, BurntToast
-    - File $PROFILE hoan chinh
-.NOTES
-    Chay script nay bang PowerShell (pwsh.exe hoac powershell.exe 5.1), voi quyen
-    Administrator de winget/msiexec/HKEY_CLASSES_ROOT hoat dong on dinh.
-    Viet Boi Loi Nguyen - lowji194.github.io.vn
-#>
+#!/usr/bin/env bash
+#
+# AIO_OhMyPosh_Setup.sh
+# ------------------------------------------------------------
+# Script cai dat AIO (All-In-One) lam dep Bash/Zsh tren Ubuntu
+# (Da kiem tra tuong thich Ubuntu 22.04 arm64 / amd64)
+# ------------------------------------------------------------
+# Tu dong cai dat va cau hinh:
+#   - Oh My Posh (theme prompt mac dinh: Dracula)
+#   - Nerd Font (CascadiaCode)
+#   - zoxide (nhay thu muc thong minh)
+#   - fzf (fuzzy finder cho lich su lenh & file)
+#   - eza (thay the "ls" hien dai, co icon) - co fallback tai binary
+#     dung kien truc (aarch64/x86_64) neu khong co san qua apt
+#   - bat (thay the "cat" co syntax highlight)
+#   - File ~/.bashrc VA ~/.zshrc (neu co zsh) deu duoc cau hinh tu dong
+#   - Dong bo tu dong cac cau hinh cua nvm/pyenv/sdkman/cargo/go/...
+#     tu ~/.bashrc sang ~/.zshrc (va nguoc lai neu can), tranh phai
+#     copy tay moi khi cai them cong cu moi
+#
+# Yeu cau: Ubuntu/Debian, co quyen sudo, ket noi internet
+# Cach chay:
+#   chmod +x AIO_OhMyPosh_Setup.sh
+#   ./AIO_OhMyPosh_Setup.sh
+#
+# Hoac chay truc tiep khong can tai file:
+#   bash <(curl -fsSL https://raw.githubusercontent.com/<user>/<repo>/main/AIO_OhMyPosh_Setup.sh)
+# ------------------------------------------------------------
+
+set -uo pipefail
+
+# ============================================================
+#  HAM TIEN ICH IN MAU
+# ============================================================
+
+GREEN='\033[0;32m'
+DARKGREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+GRAY='\033[0;90m'
+WHITE='\033[1;37m'
+NC='\033[0m' # No Color
+
+log_info()  { echo -e "${GREEN}$1${NC}"; }
+log_ok()    { echo -e "${DARKGREEN}      -> $1${NC}"; }
+log_warn()  { echo -e "${YELLOW}$1${NC}"; }
+log_err()   { echo -e "${RED}$1${NC}"; }
+log_step()  { echo -e "${CYAN}$1${NC}"; }
 
 # ============================================================
 #  KIEM TRA MOI TRUONG
 # ============================================================
 
-Write-Host ""
-Write-Host "=====================================================" -ForegroundColor Cyan
-Write-Host "   CAI DAT AIO - LAM DEP POWERSHELL 7 (Theme: Dracula)" -ForegroundColor Cyan
-Write-Host "=====================================================" -ForegroundColor Cyan
-Write-Host ""
+echo ""
+log_step "====================================================="
+log_step "   CAI DAT AIO - LAM DEP TERMINAL UBUNTU (Theme: Dracula)"
+log_step "====================================================="
+echo ""
 
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-if (-not $isAdmin) {
-    Write-Host "[CANH BAO] Script chua chay voi quyen Administrator." -ForegroundColor Yellow
-    Write-Host "Cac buoc cai PowerShell 7 (MSI), winget, va ghi HKEY_CLASSES_ROOT co the loi hoac" -ForegroundColor Yellow
-    Write-Host "chi ap dung duoc cho user hien tai. Khuyen nghi: chuot phai -> 'Run as Administrator'." -ForegroundColor Yellow
-    Write-Host ""
-}
-
-# ============================================================
-#  0. CAI DAT POWERSHELL 7 (NEU CHUA CO) + CAU HINH CMD/.ps1
-# ============================================================
-
-Write-Host "[0/9] Dang kiem tra / cai dat PowerShell 7..." -ForegroundColor Green
-
-function Get-InstalledPwshPath {
-    $cmd = Get-Command pwsh.exe -ErrorAction SilentlyContinue
-    if ($cmd) { return $cmd.Source }
-
-    foreach ($candidate in @(
-        (Join-Path $env:ProgramFiles "PowerShell\7\pwsh.exe"),
-        (Join-Path ${env:ProgramFiles(x86)} "PowerShell\7\pwsh.exe")
-    )) {
-        if ($candidate -and (Test-Path $candidate)) { return $candidate }
-    }
-    return $null
-}
-
-$pwshPath = Get-InstalledPwshPath
-$needInstall = $true
-
-if ($pwshPath) {
-    try {
-        $verStr = & $pwshPath -NoLogo -NoProfile -Command '$PSVersionTable.PSVersion.Major'
-        if ([int]$verStr -ge 7) {
-            $needInstall = $false
-            Write-Host "      -> PowerShell 7 da duoc cai san: $pwshPath (bo qua tai/cai)." -ForegroundColor DarkGreen
-        }
-    } catch {
-        # khong doc duoc version, cu coi nhu chua cai va thu cai lai
-    }
-}
-
-if ($needInstall) {
-    $wingetOk = $false
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Host "      Dang cai PowerShell 7 qua winget..." -ForegroundColor Green
-        try {
-            winget install --id Microsoft.PowerShell -s winget --accept-source-agreements --accept-package-agreements -e --silent
-            if ($LASTEXITCODE -eq 0) { $wingetOk = $true }
-            else { Write-Host "      -> winget tra ve ma loi $LASTEXITCODE." -ForegroundColor Yellow }
-        } catch {
-            Write-Host "      -> Loi khi cai qua winget: $_" -ForegroundColor Yellow
-        }
-    } else {
-        Write-Host "      -> Khong tim thay winget, se tai MSI truc tiep tu GitHub." -ForegroundColor Yellow
-    }
-
-    if (-not $wingetOk) {
-        try {
-            # Xac dinh dung kien truc CPU de tai dung file MSI (x64/arm64/x86)
-            if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64" -or $env:PROCESSOR_IDENTIFIER -match "ARM") {
-                $arch = "arm64"
-            } elseif ([Environment]::Is64BitOperatingSystem) {
-                $arch = "x64"
-            } else {
-                $arch = "x86"
-            }
-
-            Write-Host "      Dang lay link tai PowerShell 7 moi nhat (kien truc: $arch) tu GitHub API..." -ForegroundColor Green
-            $release = Invoke-RestMethod -Uri "https://api.github.com/repos/PowerShell/PowerShell/releases/latest" -Headers @{ "User-Agent" = "AIO-Setup-Script" }
-            $asset = $release.assets | Where-Object { $_.name -match "win-$arch\.msi$" } | Select-Object -First 1
-
-            if (-not $asset) {
-                Write-Host "      -> Khong tim thay file MSI phu hop cho kien truc $arch trong release moi nhat." -ForegroundColor Red
-            } else {
-                $msiPath = Join-Path $env:TEMP $asset.name
-                Write-Host "      Dang tai: $($asset.browser_download_url)" -ForegroundColor Green
-                Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $msiPath -UseBasicParsing
-
-                Write-Host "      Dang cai dat PowerShell 7 (silent, /quiet /norestart)..." -ForegroundColor Green
-                $proc = Start-Process msiexec.exe -ArgumentList "/i `"$msiPath`" /quiet /norestart" -Wait -PassThru
-                if ($proc.ExitCode -ne 0) {
-                    Write-Host "      -> msiexec tra ve ma loi $($proc.ExitCode). Co the can chay lai voi quyen Administrator." -ForegroundColor Yellow
-                } else {
-                    Write-Host "      -> Cai dat PowerShell 7 thanh cong." -ForegroundColor DarkGreen
-                }
-                Remove-Item $msiPath -Force -ErrorAction SilentlyContinue
-            }
-        } catch {
-            Write-Host "      -> Loi khi tai/cai PowerShell 7 truc tiep: $_" -ForegroundColor Red
-        }
-    }
-
-    # Refresh PATH trong session hien tai de nhan lenh pwsh vua cai (neu co)
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-    $pwshPath = Get-InstalledPwshPath
-}
-
-# --- Gan file .ps1 mo mac dinh bang PowerShell 7 ---
-if ($pwshPath) {
-    $assocCommand = '"' + $pwshPath + '" -File "%1" %*'
-    try {
-        if ($isAdmin) {
-            & reg.exe add "HKEY_CLASSES_ROOT\Microsoft.PowerShellScript.1\Shell\Open\Command" /ve /d $assocCommand /f | Out-Null
-        } else {
-            # Khong co quyen admin: ghi vao HKCU\Software\Classes (chi anh huong user hien tai,
-            # nhung van uu tien hon HKCR khi mo file .ps1)
-            & reg.exe add "HKCU\Software\Classes\Microsoft.PowerShellScript.1\Shell\Open\Command" /ve /d $assocCommand /f | Out-Null
-        }
-        Write-Host "      -> Da gan file .ps1 mo mac dinh bang: $pwshPath" -ForegroundColor DarkGreen
-    } catch {
-        Write-Host "      -> Loi khi gan file .ps1 voi PowerShell 7: $_" -ForegroundColor Yellow
-    }
-
-    # --- Thiet lap CMD.exe tu dong mo PowerShell 7 khi khoi dong (AutoRun) ---
-    try {
-        New-Item -Path "HKCU:\Software\Microsoft\Command Processor" -Force | Out-Null
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Command Processor" -Name "AutoRun" -Value ('"' + $pwshPath + '"') -Type String -Force
-        Write-Host "      -> Da dat CMD.exe tu dong mo PowerShell 7 (AutoRun = $pwshPath)." -ForegroundColor DarkGreen
-        Write-Host "         (Chi ap dung cho user hien tai. Muon huy: xoa gia tri AutoRun trong" -ForegroundColor DarkGray
-        Write-Host "          HKCU\Software\Microsoft\Command Processor, hoac chay:" -ForegroundColor DarkGray
-        Write-Host "          Remove-ItemProperty 'HKCU:\Software\Microsoft\Command Processor' AutoRun)" -ForegroundColor DarkGray
-    } catch {
-        Write-Host "      -> Loi khi thiet lap AutoRun cho CMD: $_" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "      -> Khong tim thay pwsh.exe sau khi cai dat. Bo qua gan .ps1 va AutoRun cho CMD." -ForegroundColor Yellow
-    Write-Host "         Hay chay lai script sau khi mo lai terminal moi." -ForegroundColor Yellow
-}
-Write-Host ""
-
-if ($PSVersionTable.PSVersion.Major -lt 7) {
-    Write-Host "[LUU Y] Ban dang chay phan con lai cua script bang PowerShell $($PSVersionTable.PSVersion)." -ForegroundColor Yellow
-    Write-Host "        Cac buoc tiep theo van chay duoc, nhung sau khi xong hay dong terminal nay" -ForegroundColor Yellow
-    Write-Host "        va mo lai bang 'pwsh' de dung PowerShell 7 that su." -ForegroundColor Yellow
-    Write-Host ""
-}
-
-if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-    Write-Host "[LOI] Khong tim thay winget. Vui long cai dat 'App Installer' tu Microsoft Store truoc de tiep tuc cac buoc con lai." -ForegroundColor Red
+if [[ "$(uname -s)" != "Linux" ]]; then
+    log_err "[LOI] Script nay chi ho tro Linux (Ubuntu/Debian)."
     exit 1
-}
+fi
+
+if ! command -v apt-get >/dev/null 2>&1; then
+    log_err "[LOI] Khong tim thay apt-get. Script nay danh cho Ubuntu/Debian."
+    exit 1
+fi
+
+if [[ $EUID -eq 0 ]]; then
+    log_warn "[CANH BAO] Ban dang chay script bang user root."
+    log_warn "Khuyen nghi chay bang user thuong (co quyen sudo) de cac cau hinh ap dung dung cho user hien tai."
+    echo ""
+fi
+
+if ! command -v sudo >/dev/null 2>&1 && [[ $EUID -ne 0 ]]; then
+    log_err "[LOI] Khong tim thay 'sudo' va ban khong phai root. Vui long cai sudo hoac chay bang root."
+    exit 1
+fi
+
+# Xac dinh shell dang dung (chi de hien thi thong tin, vi ban than script
+# se cau hinh cho CA HAI shell ben duoi neu co)
+CURRENT_SHELL="$(basename "$SHELL")"
+log_info "Shell dang dung: $CURRENT_SHELL"
+
+# Xac dinh kien truc CPU (can cho fallback tai binary eza, va de hien thi
+# thong tin ro rang tren may arm64)
+ARCH_RAW="$(uname -m)"
+case "$ARCH_RAW" in
+    x86_64|amd64)
+        EZA_TARGET="x86_64-unknown-linux-gnu"
+        ;;
+    aarch64|arm64)
+        EZA_TARGET="aarch64-unknown-linux-gnu"
+        ;;
+    *)
+        EZA_TARGET=""
+        ;;
+esac
+log_info "Kien truc CPU: $ARCH_RAW"
+echo ""
+
+SUDO="sudo"
+[[ $EUID -eq 0 ]] && SUDO=""
+
+# ============================================================
+#  0. CAP NHAT GOI HE THONG & CAI DEPENDENCY CO BAN
+# ============================================================
+
+log_info "[0/9] Dang cap nhat danh sach goi va cai dependency co ban (curl, unzip, fontconfig, git)..."
+if $SUDO apt-get update -y >/dev/null 2>&1 && \
+   $SUDO apt-get install -y curl unzip fontconfig git ca-certificates >/dev/null 2>&1; then
+    log_ok "Hoan tat."
+else
+    log_err "      -> Loi khi cap nhat/cai dependency co ban. Kiem tra ket noi mang hoac quyen sudo."
+fi
+echo ""
 
 # ============================================================
 #  1. CAI OH MY POSH
 # ============================================================
 
-Write-Host "[1/9] Dang cai dat Oh My Posh..." -ForegroundColor Green
-try {
-    winget install JanDeDobbeleer.OhMyPosh -s winget --accept-source-agreements --accept-package-agreements -e
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "      -> winget tra ve ma loi $LASTEXITCODE. Co the da cai san hoac can kiem tra thu cong." -ForegroundColor Yellow
-    } else {
-        Write-Host "      -> Hoan tat." -ForegroundColor DarkGreen
-    }
-} catch {
-    Write-Host "      -> Loi khi cai Oh My Posh: $_" -ForegroundColor Red
-}
-Write-Host ""
+log_info "[1/9] Dang cai dat Oh My Posh..."
+if command -v oh-my-posh >/dev/null 2>&1; then
+    log_ok "Oh My Posh da duoc cai san, bo qua."
+else
+    # install.sh chinh thuc tu dong nhan dien kien truc (amd64/arm64)
+    if curl -s https://ohmyposh.dev/install.sh | bash -s -- -d "$HOME/.local/bin" >/dev/null 2>&1; then
+        log_ok "Hoan tat. Da cai vao $HOME/.local/bin"
+    else
+        log_err "      -> Loi khi cai Oh My Posh. Vui long thu lai hoac xem huong dan tai https://ohmyposh.dev/docs/installation/linux"
+    fi
+fi
 
-# Refresh PATH trong session hien tai de nhan lenh moi cai
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-
-# --- Thiet lap bien moi truong POSH_THEMES_PATH (vinh vien, cho user hien tai) ---
-# De oh-my-posh luon load theme TU O CUNG (local), khong can tai qua mang moi lan mo terminal
-Write-Host "      Dang thiet lap POSH_THEMES_PATH (theme local)..." -ForegroundColor Green
-try {
-    $poshThemesPath = Join-Path $env:LOCALAPPDATA "Programs\oh-my-posh\themes"
-    if (Test-Path $poshThemesPath) {
-        [Environment]::SetEnvironmentVariable("POSH_THEMES_PATH", $poshThemesPath, "User")
-        $env:POSH_THEMES_PATH = $poshThemesPath
-        Write-Host "      -> Da set POSH_THEMES_PATH = $poshThemesPath" -ForegroundColor DarkGreen
-    } else {
-        Write-Host "      -> Chua tim thay thu muc theme tai $poshThemesPath (se thu lai sau khi mo terminal moi)." -ForegroundColor Yellow
-    }
-} catch {
-    Write-Host "      -> Loi khi set POSH_THEMES_PATH: $_" -ForegroundColor Red
-}
-Write-Host ""
+# Dam bao $HOME/.local/bin nam trong PATH cua session hien tai
+export PATH="$HOME/.local/bin:$PATH"
+echo ""
 
 # ============================================================
-#  2. CAI NERD FONT
+#  2. CAI NERD FONT (CascadiaCode)
 # ============================================================
 
-Write-Host "[2/9] Dang cai dat Nerd Font (CascadiaCode)..." -ForegroundColor Green
-try {
-    if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
-        oh-my-posh font install CascadiaCode
-        Write-Host "      -> Hoan tat. Nho vao Windows Terminal > Settings > Font face doi thanh 'CaskaydiaCove Nerd Font'." -ForegroundColor DarkGreen
-    } else {
-        Write-Host "      -> Bo qua: chua tim thay lenh oh-my-posh. Hay chay lai script sau khi mo lai terminal moi." -ForegroundColor Yellow
-    }
-} catch {
-    Write-Host "      -> Loi khi cai font: $_" -ForegroundColor Red
-}
-Write-Host ""
+log_info "[2/9] Dang cai dat Nerd Font (CascadiaCode)..."
+FONT_DIR="$HOME/.local/share/fonts"
+mkdir -p "$FONT_DIR"
+
+if fc-list | grep -qi "CaskaydiaCove Nerd Font"; then
+    log_ok "Font da duoc cai san, bo qua."
+else
+    # File font khong phu thuoc kien truc CPU nen tai binh thuong
+    TMP_FONT_ZIP="$(mktemp -d)/CascadiaCode.zip"
+    if curl -fsSL -o "$TMP_FONT_ZIP" "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaCode.zip"; then
+        unzip -oq "$TMP_FONT_ZIP" -d "$FONT_DIR" "*.ttf" 2>/dev/null
+        fc-cache -f "$FONT_DIR" >/dev/null 2>&1
+        log_ok "Hoan tat. Nho chinh Font cua terminal thanh 'CaskaydiaCove Nerd Font'."
+    else
+        log_err "      -> Loi khi tai font. Ban co the tai thu cong tai https://www.nerdfonts.com/"
+    fi
+fi
+echo ""
 
 # ============================================================
-#  3. CAP NHAT PSReadLine
+#  3. CAI zoxide (nhay thu muc thong minh)
 # ============================================================
 
-Write-Host "[3/9] Dang cap nhat PSReadLine..." -ForegroundColor Green
-try {
-    Install-Module PSReadLine -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction Stop
-    Write-Host "      -> Hoan tat." -ForegroundColor DarkGreen
-} catch {
-    Write-Host "      -> Loi khi cai PSReadLine: $_" -ForegroundColor Red
-}
-Write-Host ""
+log_info "[3/9] Dang cai dat zoxide..."
+if command -v zoxide >/dev/null 2>&1; then
+    log_ok "zoxide da duoc cai san, bo qua."
+else
+    # install.sh chinh thuc tu dong nhan dien kien truc
+    if curl -fsSL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash >/dev/null 2>&1; then
+        log_ok "Hoan tat."
+    else
+        log_err "      -> Loi khi cai zoxide."
+    fi
+fi
+export PATH="$HOME/.local/bin:$PATH"
+echo ""
 
 # ============================================================
-#  4. CAI Terminal-Icons
+#  4. CAI fzf (fuzzy finder)
 # ============================================================
 
-Write-Host "[4/9] Dang cai dat Terminal-Icons..." -ForegroundColor Green
-try {
-    Install-Module -Name Terminal-Icons -Repository PSGallery -Force -Scope CurrentUser -ErrorAction Stop
-    Write-Host "      -> Hoan tat." -ForegroundColor DarkGreen
-} catch {
-    Write-Host "      -> Loi khi cai Terminal-Icons: $_" -ForegroundColor Red
-}
-Write-Host ""
+log_info "[4/9] Dang cai dat fzf (fuzzy finder)..."
+if command -v fzf >/dev/null 2>&1; then
+    log_ok "fzf da duoc cai san, bo qua."
+else
+    if [[ ! -d "$HOME/.fzf" ]]; then
+        git clone --depth 1 https://github.com/junegunn/fzf.git "$HOME/.fzf" >/dev/null 2>&1
+    fi
+    # install script cua fzf tu tai binary dung kien truc (arm64/amd64)
+    # Cai key-bindings + completion cho CA bash lan zsh (bo --no-bash/--no-zsh)
+    if "$HOME/.fzf/install" --key-bindings --completion --no-update-rc >/dev/null 2>&1; then
+        log_ok "Hoan tat. (Ctrl+T tim file, Ctrl+R tim lich su lenh)"
+    else
+        log_err "      -> Loi khi cai fzf."
+    fi
+fi
+echo ""
 
 # ============================================================
-#  5. CAI zoxide
+#  5. CAI eza (thay the ls hien dai)
+#     Luu y: goi "eza" CHUA co trong repo apt mac dinh cua
+#     Ubuntu 22.04 (jammy) o ca amd64 lan arm64 (chi co tu 23.10+).
+#     Neu apt khong tim thay, script se tu dong tai binary release
+#     dung kien truc CPU (aarch64/x86_64) tu GitHub ve $HOME/.local/bin.
 # ============================================================
 
-Write-Host "[5/9] Dang cai dat zoxide..." -ForegroundColor Green
-try {
-    winget install ajeetdsouza.zoxide -s winget --accept-source-agreements --accept-package-agreements -e
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "      -> winget tra ve ma loi $LASTEXITCODE. Co the da cai san hoac can kiem tra thu cong." -ForegroundColor Yellow
-    } else {
-        Write-Host "      -> Hoan tat." -ForegroundColor DarkGreen
-    }
-} catch {
-    Write-Host "      -> Loi khi cai zoxide: $_" -ForegroundColor Red
-}
-Write-Host ""
-
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-
-# ============================================================
-#  6. CAI CAC MODULE KHUYEN NGHI (posh-git + PSFzf)
-# ============================================================
-
-Write-Host "[6/9] Dang cai dat posh-git va PSFzf (fuzzy finder)..." -ForegroundColor Green
-
-try {
-    Install-Module posh-git -Scope CurrentUser -Force -SkipPublisherCheck -ErrorAction Stop
-    Write-Host "      -> posh-git: Hoan tat." -ForegroundColor DarkGreen
-} catch {
-    Write-Host "      -> Loi khi cai posh-git: $_" -ForegroundColor Red
-}
-
-try {
-    # PSFzf can binary fzf, cai qua winget truoc
-    winget install junegunn.fzf -s winget --accept-source-agreements --accept-package-agreements -e
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "      -> fzf: winget tra ve ma loi $LASTEXITCODE." -ForegroundColor Yellow
-    }
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
-    Install-Module PSFzf -Scope CurrentUser -Force -SkipPublisherCheck -ErrorAction Stop
-    Write-Host "      -> PSFzf: Hoan tat." -ForegroundColor DarkGreen
-} catch {
-    Write-Host "      -> Loi khi cai PSFzf: $_" -ForegroundColor Red
-}
-Write-Host ""
+log_info "[5/9] Dang cai dat eza (ls hien dai, co icon)..."
+if command -v eza >/dev/null 2>&1; then
+    log_ok "eza da duoc cai san, bo qua."
+elif $SUDO apt-get install -y eza >/dev/null 2>&1; then
+    log_ok "Hoan tat (cai qua apt)."
+elif [[ -n "$EZA_TARGET" ]]; then
+    log_warn "      -> Khong co san qua apt (binh thuong tren Ubuntu 22.04). Dang tai binary rieng cho $ARCH_RAW..."
+    TMP_EZA_DIR="$(mktemp -d)"
+    EZA_TAG="$(curl -fsSL https://api.github.com/repos/eza-community/eza/releases/latest 2>/dev/null | grep -m1 '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')"
+    EZA_URL="https://github.com/eza-community/eza/releases/latest/download/eza_${EZA_TARGET}.tar.gz"
+    if curl -fsSL -o "$TMP_EZA_DIR/eza.tar.gz" "$EZA_URL" && \
+       tar -xzf "$TMP_EZA_DIR/eza.tar.gz" -C "$TMP_EZA_DIR"; then
+        mkdir -p "$HOME/.local/bin"
+        # binary co the nam truc tiep hoac trong thu muc con, tim va copy
+        FOUND_EZA_BIN="$(find "$TMP_EZA_DIR" -type f -name "eza" | head -n1)"
+        if [[ -n "$FOUND_EZA_BIN" ]]; then
+            install -m 755 "$FOUND_EZA_BIN" "$HOME/.local/bin/eza"
+            log_ok "Hoan tat (tai binary $EZA_TARGET ${EZA_TAG:-latest} vao \$HOME/.local/bin)."
+        else
+            log_err "      -> Khong tim thay file binary eza sau khi giai nen. Bo qua eza."
+        fi
+    else
+        log_warn "      -> Khong tai duoc binary eza cho $ARCH_RAW. Bo qua eza (khong bat buoc)."
+    fi
+    rm -rf "$TMP_EZA_DIR"
+else
+    log_warn "      -> Khong xac dinh duoc kien truc CPU de tai binary. Bo qua eza (khong bat buoc)."
+fi
+export PATH="$HOME/.local/bin:$PATH"
+echo ""
 
 # ============================================================
-#  7. MODULE BO SUNG (TUY CHON)
+#  6. CAI bat (thay the cat co syntax highlight)
 # ============================================================
 
-Write-Host "[7/9] Module bo sung (tuy chon):" -ForegroundColor Green
-Write-Host "      - ImportExcel        : doc/ghi file Excel bang PowerShell" -ForegroundColor White
-Write-Host "      - Pester             : framework viet unit test cho script" -ForegroundColor White
-Write-Host "      - PSScriptAnalyzer   : linter kiem tra chat luong code" -ForegroundColor White
-Write-Host "      - SecretManagement   : luu password/API key an toan" -ForegroundColor White
-Write-Host "      - BurntToast         : hien thong bao Windows (toast) tu script" -ForegroundColor White
-Write-Host ""
-
-$installExtra = Read-Host "Ban co muon cai tat ca cac module bo sung o tren khong? (Y/n)"
-
-if ($installExtra -eq "" -or $installExtra -match "^[Yy]") {
-    $extraModules = @(
-        "ImportExcel",
-        "Pester",
-        "PSScriptAnalyzer",
-        "Microsoft.PowerShell.SecretManagement",
-        "Microsoft.PowerShell.SecretStore",
-        "BurntToast"
-    )
-
-    foreach ($mod in $extraModules) {
-        Write-Host "      Dang cai $mod..." -ForegroundColor Green
-        try {
-            Install-Module -Name $mod -Scope CurrentUser -Force -SkipPublisherCheck -ErrorAction Stop
-            Write-Host "      -> $mod : Hoan tat." -ForegroundColor DarkGreen
-        } catch {
-            Write-Host "      -> Loi khi cai $mod : $_" -ForegroundColor Red
-        }
-    }
-} else {
-    Write-Host "      -> Bo qua cac module bo sung. Ban co the tu cai sau bang Install-Module." -ForegroundColor Yellow
-}
-Write-Host ""
+log_info "[6/9] Dang cai dat bat (cat co syntax highlight)..."
+if command -v bat >/dev/null 2>&1 || command -v batcat >/dev/null 2>&1; then
+    log_ok "bat da duoc cai san, bo qua."
+else
+    # Goi "bat" co san qua apt tren Ubuntu 22.04 (ca amd64 va arm64),
+    # lenh thuc thi se la "batcat" de tranh xung dot ten voi goi khac.
+    if $SUDO apt-get install -y bat >/dev/null 2>&1; then
+        log_ok "Hoan tat (cai qua apt, lenh la 'batcat' tren Ubuntu)."
+    else
+        log_warn "      -> Khong co san qua apt. Bo qua bat (khong bat buoc)."
+    fi
+fi
+echo ""
 
 # ============================================================
-#  8. TAO FILE $PROFILE
+#  7. TAI THEME DRACULA CHO OH MY POSH
 # ============================================================
 
-Write-Host "[8/9] Dang cau hinh file profile PowerShell (theme: Dracula)..." -ForegroundColor Green
+log_info "[7/9] Dang tai theme Dracula cho Oh My Posh..."
+THEME_DIR="$HOME/.poshthemes"
+mkdir -p "$THEME_DIR"
+DRACULA_THEME_PATH="$THEME_DIR/dracula.omp.json"
 
-$profileDir = Split-Path $PROFILE -Parent
-if (-not (Test-Path $profileDir)) {
-    New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
-}
+if curl -fsSL -o "$DRACULA_THEME_PATH" "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/dracula.omp.json"; then
+    log_ok "Hoan tat. Theme luu tai: $DRACULA_THEME_PATH"
+else
+    log_err "      -> Loi khi tai theme Dracula. Se dung cau hinh du phong trong file rc."
+fi
+echo ""
 
-if (Test-Path $PROFILE) {
-    $backupPath = "$PROFILE.backup_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-    Copy-Item $PROFILE $backupPath -Force
-    Write-Host "      -> Da sao luu profile cu vao: $backupPath" -ForegroundColor DarkGray
-}
-
-$profileContent = @'
 # ============================================================
-#  POWERSHELL PROFILE - AUTO GENERATED
+#  8. CAU HINH FILE RC CHO CA ~/.bashrc VA ~/.zshrc
+#     (khong con phu thuoc vao shell hien tai nua)
 # ============================================================
 
-# --- Oh My Posh (theme prompt: Dracula, uu tien load LOCAL) ---
-if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
+MARKER_START="# >>> AIO OhMyPosh Setup >>>"
+MARKER_END="# <<< AIO OhMyPosh Setup <<<"
 
-    # Neu POSH_THEMES_PATH chua duoc set trong session nay, thu tu suy ra tu duong dan cai dat mac dinh
-    if (-not $env:POSH_THEMES_PATH) {
-        $fallbackThemesPath = Join-Path $env:LOCALAPPDATA "Programs\oh-my-posh\themes"
-        if (Test-Path $fallbackThemesPath) {
-            $env:POSH_THEMES_PATH = $fallbackThemesPath
-        }
-    }
+configure_rc_file() {
+    local rc_file="$1"
+    local shell_name="$2"   # "bash" hoac "zsh"
 
-    $draculaTheme = $null
-    if ($env:POSH_THEMES_PATH) {
-        $draculaTheme = Join-Path $env:POSH_THEMES_PATH "dracula.omp.json"
-    }
+    log_info "[8/9] Dang cau hinh $rc_file (shell: $shell_name, theme: Dracula)..."
 
-    if ($draculaTheme -and (Test-Path $draculaTheme)) {
-        # Load theme LOCAL - khong can mang, nhanh hon
-        oh-my-posh init pwsh --config $draculaTheme | Invoke-Expression
-    } else {
-        # Fallback: chi tai qua mang neu khong tim thay theme local
-        oh-my-posh init pwsh --config "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/dracula.omp.json" | Invoke-Expression
-    }
-}
+    touch "$rc_file"
+    local backup_path="${rc_file}.backup_$(date +%Y%m%d_%H%M%S)"
+    cp "$rc_file" "$backup_path"
+    log_ok "Da sao luu file cu vao: $backup_path"
 
-# --- PSReadLine (autocomplete + syntax highlight) ---
-if (Get-Module -ListAvailable -Name PSReadLine) {
-    Import-Module PSReadLine
-    Set-PSReadLineOption -PredictionSource History
-    Set-PSReadLineOption -PredictionViewStyle ListView
-    Set-PSReadLineOption -Colors @{
-        Command   = 'Cyan'
-        Parameter = 'Gray'
-        String    = 'Yellow'
-        Operator  = 'Magenta'
-        Variable  = 'Green'
-        Comment   = 'DarkGray'
-    }
-    Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete
-}
+    # Xoa block cu (neu chay lai script) truoc khi chen block moi
+    if grep -qF "$MARKER_START" "$rc_file"; then
+        sed -i "/$MARKER_START/,/$MARKER_END/d" "$rc_file"
+    fi
 
-# --- Terminal-Icons (icon file/folder) ---
-if (Get-Module -ListAvailable -Name Terminal-Icons) {
-    Import-Module Terminal-Icons
-}
+    cat >> "$rc_file" <<EOF
+$MARKER_START
+# ------------------------------------------------------------
+# Cau hinh tu dong boi AIO_OhMyPosh_Setup.sh
+# ------------------------------------------------------------
 
-# --- posh-git (trang thai Git tren prompt + tab-completion cho git) ---
-if (Get-Module -ListAvailable -Name posh-git) {
-    Import-Module posh-git
-}
+# --- PATH bo sung ---
+export PATH="\$HOME/.local/bin:\$PATH"
 
-# --- PSFzf (fuzzy finder: Ctrl+T tim file, Ctrl+R tim lich su lenh) ---
-if (Get-Module -ListAvailable -Name PSFzf) {
-    Import-Module PSFzf
-    Set-PsFzfOption -PSReadlineChordProvider 'Ctrl+t' -PSReadlineChordReverseHistory 'Ctrl+r'
-}
+# --- Oh My Posh (theme prompt: Dracula) ---
+if command -v oh-my-posh >/dev/null 2>&1; then
+    if [[ -f "$DRACULA_THEME_PATH" ]]; then
+        eval "\$(oh-my-posh init ${shell_name} --config '$DRACULA_THEME_PATH')"
+    else
+        eval "\$(oh-my-posh init ${shell_name} --config 'https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/dracula.omp.json')"
+    fi
+fi
 
 # --- zoxide (nhay thu muc thong minh: dung "z ten-thu-muc") ---
-if (Get-Command zoxide -ErrorAction SilentlyContinue) {
-    Invoke-Expression (& { (zoxide init powershell | Out-String) })
-}
+if command -v zoxide >/dev/null 2>&1; then
+    eval "\$(zoxide init ${shell_name})"
+fi
+
+# --- fzf (fuzzy finder: Ctrl+T tim file, Ctrl+R tim lich su lenh) ---
+[[ -f "\$HOME/.fzf.${shell_name}" ]] && source "\$HOME/.fzf.${shell_name}"
 
 # --- Alias tien ich ---
-Set-Alias ll Get-ChildItem
-function .. { Set-Location .. }
-function ... { Set-Location ..\.. }
+if command -v eza >/dev/null 2>&1; then
+    alias ls='eza --icons'
+    alias ll='eza -la --icons'
+fi
+if command -v batcat >/dev/null 2>&1; then
+    alias cat='batcat'
+elif command -v bat >/dev/null 2>&1; then
+    alias cat='bat'
+fi
+alias ..='cd ..'
+alias ...='cd ../..'
 
-Write-Host "Viet Boi Loi Nguyen - lowji194.github.io.vn" -ForegroundColor DarkGray
-'@
+$MARKER_END
+EOF
 
-Set-Content -Path $PROFILE -Value $profileContent -Encoding UTF8
+    log_ok "Hoan tat. Da cau hinh: $rc_file"
+}
 
-Write-Host "      -> Hoan tat. File profile: $PROFILE" -ForegroundColor DarkGreen
-Write-Host ""
+# Luon cau hinh ~/.bashrc
+configure_rc_file "$HOME/.bashrc" "bash"
+
+# Neu da co zsh (hoac se cai o buoc sau), cau hinh luon ~/.zshrc
+HAS_ZSH=0
+if command -v zsh >/dev/null 2>&1; then
+    HAS_ZSH=1
+    configure_rc_file "$HOME/.zshrc" "zsh"
+else
+    log_warn "      -> Chua phat hien zsh tren he thong nen tam thoi bo qua ~/.zshrc."
+    log_warn "         Neu ban cai zsh sau nay, hay chay lai script nay de tu dong cau hinh ~/.zshrc."
+fi
+echo ""
+
+# ============================================================
+#  9. DONG BO CAU HINH CONG CU (nvm/pyenv/sdkman/cargo/go/rbenv/...)
+#     GIUA ~/.bashrc VA ~/.zshrc
+#     - Chi dong bo cac dong NAM NGOAI block AIO ben tren (block do
+#       tool khac tu ghi vao, vi du nvm/pyenv installer).
+#     - Sao chep dong nao thieu ben kia, khong xoa/ghi de gi ca.
+# ============================================================
+
+log_info "[9/9] Dang dong bo cau hinh cong cu (nvm/pyenv/sdkman/cargo/go/rbenv...) giua bashrc va zshrc..."
+
+if [[ "$HAS_ZSH" -eq 1 ]]; then
+    # Cac pattern nhan dien dong cau hinh cua tool quen thuoc
+    TOOL_PATTERN='NVM_DIR|pyenv|SDKMAN|\.cargo/env|/\.cargo/bin|GOPATH|/go/bin|rbenv|\.rbenv|goenv|\.goenv|conda\.sh|miniconda|anaconda'
+
+    sync_tool_lines() {
+        local src="$1"
+        local dst="$2"
+
+        [[ -f "$src" ]] || return 0
+        touch "$dst"
+
+        # Lay noi dung NGOAI block AIO cua file nguon, loc dong khop pattern tool,
+        # bo dong trong/comment thuan tuy
+        local src_lines
+        src_lines="$(sed "/$MARKER_START/,/$MARKER_END/d" "$src" | grep -E "$TOOL_PATTERN" | grep -v '^[[:space:]]*#' | sed '/^[[:space:]]*$/d')"
+
+        [[ -z "$src_lines" ]] && return 0
+
+        local added=0
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            if ! grep -qF -- "$line" "$dst"; then
+                {
+                    echo ""
+                    echo "# --- Dong bo tu dong tu $(basename "$src") boi AIO_OhMyPosh_Setup.sh ---"
+                    echo "$line"
+                } >> "$dst"
+                added=$((added + 1))
+            fi
+        done <<< "$src_lines"
+
+        echo "$added"
+    }
+
+    ADDED_TO_ZSHRC="$(sync_tool_lines "$HOME/.bashrc" "$HOME/.zshrc" | tail -n1)"
+    ADDED_TO_BASHRC="$(sync_tool_lines "$HOME/.zshrc" "$HOME/.bashrc" | tail -n1)"
+
+    log_ok "Da dong bo: ${ADDED_TO_ZSHRC:-0} dong moi sang ~/.zshrc, ${ADDED_TO_BASHRC:-0} dong moi sang ~/.bashrc."
+    if [[ "${ADDED_TO_ZSHRC:-0}" -gt 0 || "${ADDED_TO_BASHRC:-0}" -gt 0 ]]; then
+        log_warn "      -> Kiem tra lai ~/.bashrc va ~/.zshrc de chac chan cau hinh dong bo dung y ban."
+    fi
+else
+    log_warn "      -> Khong co zsh nen bo qua buoc dong bo. Chay lai script sau khi cai zsh de dong bo."
+fi
+echo ""
 
 # ============================================================
 #  KET THUC
 # ============================================================
 
-Write-Host "=====================================================" -ForegroundColor Cyan
-Write-Host "  CAI DAT HOAN TAT! (Theme mac dinh: Dracula)" -ForegroundColor Cyan
-Write-Host "=====================================================" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "CAC BUOC TIEP THEO (BAT BUOC):" -ForegroundColor Yellow
-Write-Host "  1. Dong terminal nay va mo lai (CMD se tu dong vao PowerShell 7 nho AutoRun)." -ForegroundColor White
-Write-Host "  2. Mo Windows Terminal > Settings > Profile PowerShell > Appearance" -ForegroundColor White
-Write-Host "     -> Doi Font face thanh: CaskaydiaCove Nerd Font" -ForegroundColor White
-Write-Host "  3. (Tuy chon) Neu muon doi theme khac Dracula, sua dong 'dracula.omp.json'" -ForegroundColor White
-Write-Host "     trong file profile ($PROFILE) sang theme khac." -ForegroundColor White
-Write-Host "     Xem danh sach theme: https://ohmyposh.dev/docs/themes" -ForegroundColor White
-Write-Host ""
-Write-Host "GHI CHU VE AUTORUN CUA CMD:" -ForegroundColor Yellow
-Write-Host "  - Moi lan mo CMD.exe, no se tu dong chay pwsh.exe (PowerShell 7)." -ForegroundColor White
-Write-Host "  - Dieu nay cung anh huong toi cac chuong trinh khac goi 'cmd /c ...' ngam," -ForegroundColor White
-Write-Host "    vi CMD se in ra dong khoi dong pwsh truoc khi chay lenh do." -ForegroundColor White
-Write-Host "  - De huy AutoRun bat cu luc nao, chay:" -ForegroundColor White
-Write-Host "      Remove-ItemProperty 'HKCU:\Software\Microsoft\Command Processor' AutoRun" -ForegroundColor White
-Write-Host ""
-Write-Host "GOI Y SU DUNG NHANH:" -ForegroundColor Yellow
-Write-Host "  - Ctrl+R : tim lich su lenh bang fuzzy search (PSFzf)" -ForegroundColor White
-Write-Host "  - Ctrl+T : tim file bang fuzzy search (PSFzf)" -ForegroundColor White
-Write-Host "  - z ten-thu-muc : nhay nhanh toi thu muc da tung vao (zoxide)" -ForegroundColor White
-Write-Host ""
+echo ""
+log_step "====================================================="
+log_step "  CAI DAT HOAN TAT! (Theme mac dinh: Dracula)"
+log_step "====================================================="
+echo ""
+log_warn "CAC BUOC TIEP THEO (BAT BUOC):"
+echo -e "${WHITE}  1. Chay lenh sau de nap lai cau hinh (hoac dong terminal va mo lai):${NC}"
+echo -e "${WHITE}     source ~/.bashrc   # neu dang dung bash${NC}"
+echo -e "${WHITE}     source ~/.zshrc    # neu dang dung zsh${NC}"
+echo -e "${WHITE}  2. Doi Font cua terminal (GNOME Terminal / Windows Terminal WSL / ...) thanh:${NC}"
+echo -e "${WHITE}     'CaskaydiaCove Nerd Font'${NC}"
+echo -e "${WHITE}  3. (Tuy chon) Neu muon doi theme khac Dracula, sua duong dan trong dong 'oh-my-posh init'${NC}"
+echo -e "${WHITE}     trong ca ~/.bashrc va ~/.zshrc sang theme khac.${NC}"
+echo -e "${WHITE}     Xem danh sach theme: https://ohmyposh.dev/docs/themes${NC}"
+echo ""
+log_warn "VE VIEC DONG BO CONG CU (nvm/pyenv/sdkman/cargo/go/...):"
+echo -e "${WHITE}  - Tu nay ve sau, moi khi ban cai them 1 cong cu moi (vi du: cai nvm de dung${NC}"
+echo -e "${WHITE}    npm/nodejs) va no chi ghi cau hinh vao ~/.bashrc, ban CHI CAN chay lai:${NC}"
+echo -e "${WHITE}       ./AIO_OhMyPosh_Setup.sh${NC}"
+echo -e "${WHITE}    Script se tu dong phat hien va dong bo cau hinh do sang ~/.zshrc (va nguoc lai),${NC}"
+echo -e "${WHITE}    khong can copy tay nua.${NC}"
+echo ""
+log_warn "GOI Y SU DUNG NHANH:"
+echo -e "${WHITE}  - Ctrl+R : tim lich su lenh bang fuzzy search (fzf)${NC}"
+echo -e "${WHITE}  - Ctrl+T : tim file bang fuzzy search (fzf)${NC}"
+echo -e "${WHITE}  - z ten-thu-muc : nhay nhanh toi thu muc da tung vao (zoxide)${NC}"
+echo ""
