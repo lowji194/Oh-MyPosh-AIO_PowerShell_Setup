@@ -90,6 +90,10 @@ try {
             New-Item -ItemType Directory -Force -Path $poshThemesPath | Out-Null
             $themesZip = Join-Path $env:TEMP "oh-my-posh-themes.zip"
             Invoke-WebRequest -Uri "https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip" -OutFile $themesZip -UseBasicParsing
+            $zipSize = (Get-Item $themesZip).Length
+            if ($zipSize -lt 500000) {
+                throw "File zip qua nho ($zipSize byte), co the tai bi loi/dut mang."
+            }
             Expand-Archive -Path $themesZip -DestinationPath $poshThemesPath -Force
             Remove-Item $themesZip -Force -ErrorAction SilentlyContinue
 
