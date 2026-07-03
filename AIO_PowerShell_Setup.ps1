@@ -71,12 +71,46 @@ $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";"
 Write-Host "      Dang thiet lap POSH_THEMES_PATH (theme local)..." -ForegroundColor Green
 try {
     $poshThemesPath = Join-Path $env:LOCALAPPDATA "Programs\oh-my-posh\themes"
+
+    # Kiem tra xem thu muc theme co ton tai VA co san file .omp.json ben trong khong.
+    # Luu y: winget/App Installer chi cai BINARY oh-my-posh, KHONG tu dong tai theme ve,
+    # nen thu muc nay co the ton tai nhung rong -> van phai tai theme thu cong.
+    $needDownloadThemes = $true
+    if (Test-Path $poshThemesPath) {
+        $existingThemeCount = (Get-ChildItem -Path $poshThemesPath -Filter '*.omp.json' -ErrorAction SilentlyContinue | Measure-Object).Count
+        if ($existingThemeCount -gt 0) {
+            $needDownloadThemes = $false
+            Write-Host "      -> Da co san $existingThemeCount theme tai $poshThemesPath" -ForegroundColor DarkGreen
+        }
+    }
+
+    if ($needDownloadThemes) {
+        Write-Host "      -> Chua co theme local, dang tai bo theme tu GitHub release..." -ForegroundColor Yellow
+        try {
+            New-Item -ItemType Directory -Force -Path $poshThemesPath | Out-Null
+            $themesZip = Join-Path $env:TEMP "oh-my-posh-themes.zip"
+            Invoke-WebRequest -Uri "https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip" -OutFile $themesZip -UseBasicParsing
+            Expand-Archive -Path $themesZip -DestinationPath $poshThemesPath -Force
+            Remove-Item $themesZip -Force -ErrorAction SilentlyContinue
+
+            $downloadedCount = (Get-ChildItem -Path $poshThemesPath -Filter '*.omp.json' -ErrorAction SilentlyContinue | Measure-Object).Count
+            if ($downloadedCount -gt 0) {
+                Write-Host "      -> Da tai va giai nen thanh cong $downloadedCount theme." -ForegroundColor DarkGreen
+            } else {
+                Write-Host "      -> Da tai xong nhung khong thay file theme nao, kiem tra lai thu cong." -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "      -> Loi khi tai bo theme: $_" -ForegroundColor Red
+            Write-Host "         Ban co the tai thu cong tai: https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest/download/themes.zip" -ForegroundColor Yellow
+        }
+    }
+
     if (Test-Path $poshThemesPath) {
         [Environment]::SetEnvironmentVariable("POSH_THEMES_PATH", $poshThemesPath, "User")
         $env:POSH_THEMES_PATH = $poshThemesPath
         Write-Host "      -> Da set POSH_THEMES_PATH = $poshThemesPath" -ForegroundColor DarkGreen
     } else {
-        Write-Host "      -> Chua tim thay thu muc theme tai $poshThemesPath (se thu lai sau khi mo terminal moi)." -ForegroundColor Yellow
+        Write-Host "      -> Van chua tim thay thu muc theme tai $poshThemesPath (se thu lai sau khi mo terminal moi)." -ForegroundColor Yellow
     }
 } catch {
     Write-Host "      -> Loi khi set POSH_THEMES_PATH: $_" -ForegroundColor Red
