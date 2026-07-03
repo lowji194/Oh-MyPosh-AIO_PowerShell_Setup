@@ -13,6 +13,9 @@
 #   - eza (thay the "ls" hien dai, co icon) - co fallback tai binary
 #     dung kien truc (aarch64/x86_64) neu khong co san qua apt
 #   - bat (thay the "cat" co syntax highlight)
+#   - fd (thay the "find", cu phap don gian hon) - fallback tai binary
+#   - btop (thay the "top", giao dien giam sat he thong dep hon) - fallback tai binary
+#   - lazygit (TUI quan ly Git truc quan) - tai binary tu GitHub release
 #   - File ~/.bashrc VA ~/.zshrc (neu co zsh) deu duoc cau hinh tu dong
 #   - Dong bo tu dong cac cau hinh cua nvm/pyenv/sdkman/cargo/go/...
 #     tu ~/.bashrc sang ~/.zshrc (va nguoc lai neu can), tranh phai
@@ -47,6 +50,21 @@ log_ok()    { echo -e "${DARKGREEN}      -> $1${NC}"; }
 log_warn()  { echo -e "${YELLOW}$1${NC}"; }
 log_err()   { echo -e "${RED}$1${NC}"; }
 log_step()  { echo -e "${CYAN}$1${NC}"; }
+
+# ============================================================
+#  HAM TIEN ICH: LAY LINK ASSET MOI NHAT TU GITHUB RELEASE
+# ============================================================
+
+fetch_latest_asset_url() {
+    # $1 = "owner/repo", $2 = pattern (regex) de loc trong danh sach asset URL
+    local repo="$1"
+    local pattern="$2"
+    curl -fsSL "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null \
+        | grep -Eo '"browser_download_url":[[:space:]]*"[^"]+"' \
+        | sed -E 's/.*"(https:[^"]+)"/\1/' \
+        | grep -E "$pattern" \
+        | head -n1
+}
 
 # ============================================================
 #  KIEM TRA MOI TRUONG
@@ -84,18 +102,27 @@ fi
 CURRENT_SHELL="$(basename "$SHELL")"
 log_info "Shell dang dung: $CURRENT_SHELL"
 
-# Xac dinh kien truc CPU (can cho fallback tai binary eza, va de hien thi
-# thong tin ro rang tren may arm64)
+# Xac dinh kien truc CPU (can cho fallback tai binary eza/fd/btop/lazygit,
+# va de hien thi thong tin ro rang tren may arm64)
 ARCH_RAW="$(uname -m)"
 case "$ARCH_RAW" in
     x86_64|amd64)
         EZA_TARGET="x86_64-unknown-linux-gnu"
+        FD_ARCH="x86_64-unknown-linux-gnu"
+        BTOP_ARCH="x86_64-linux-musl"
+        LAZYGIT_ARCH="Linux_x86_64"
         ;;
     aarch64|arm64)
         EZA_TARGET="aarch64-unknown-linux-gnu"
+        FD_ARCH="aarch64-unknown-linux-gnu"
+        BTOP_ARCH="aarch64-linux-musl"
+        LAZYGIT_ARCH="Linux_arm64"
         ;;
     *)
         EZA_TARGET=""
+        FD_ARCH=""
+        BTOP_ARCH=""
+        LAZYGIT_ARCH=""
         ;;
 esac
 log_info "Kien truc CPU: $ARCH_RAW"
@@ -108,7 +135,7 @@ SUDO="sudo"
 #  0. CAP NHAT GOI HE THONG & CAI DEPENDENCY CO BAN
 # ============================================================
 
-log_info "[0/9] Dang cap nhat danh sach goi va cai dependency co ban (curl, unzip, fontconfig, git)..."
+log_info "[0/12] Dang cap nhat danh sach goi va cai dependency co ban (curl, unzip, fontconfig, git)..."
 if $SUDO apt-get update -y >/dev/null 2>&1 && \
    $SUDO apt-get install -y curl unzip fontconfig git ca-certificates >/dev/null 2>&1; then
     log_ok "Hoan tat."
@@ -121,7 +148,7 @@ echo ""
 #  1. CAI OH MY POSH
 # ============================================================
 
-log_info "[1/9] Dang cai dat Oh My Posh..."
+log_info "[1/12] Dang cai dat Oh My Posh..."
 if command -v oh-my-posh >/dev/null 2>&1; then
     log_ok "Oh My Posh da duoc cai san, bo qua."
 else
@@ -141,7 +168,7 @@ echo ""
 #  2. CAI NERD FONT (CascadiaCode)
 # ============================================================
 
-log_info "[2/9] Dang cai dat Nerd Font (CascadiaCode)..."
+log_info "[2/12] Dang cai dat Nerd Font (CascadiaCode)..."
 FONT_DIR="$HOME/.local/share/fonts"
 mkdir -p "$FONT_DIR"
 
@@ -164,7 +191,7 @@ echo ""
 #  3. CAI zoxide (nhay thu muc thong minh)
 # ============================================================
 
-log_info "[3/9] Dang cai dat zoxide..."
+log_info "[3/12] Dang cai dat zoxide..."
 if command -v zoxide >/dev/null 2>&1; then
     log_ok "zoxide da duoc cai san, bo qua."
 else
@@ -182,7 +209,7 @@ echo ""
 #  4. CAI fzf (fuzzy finder)
 # ============================================================
 
-log_info "[4/9] Dang cai dat fzf (fuzzy finder)..."
+log_info "[4/12] Dang cai dat fzf (fuzzy finder)..."
 if command -v fzf >/dev/null 2>&1; then
     log_ok "fzf da duoc cai san, bo qua."
 else
@@ -207,7 +234,7 @@ echo ""
 #     dung kien truc CPU (aarch64/x86_64) tu GitHub ve $HOME/.local/bin.
 # ============================================================
 
-log_info "[5/9] Dang cai dat eza (ls hien dai, co icon)..."
+log_info "[5/12] Dang cai dat eza (ls hien dai, co icon)..."
 if command -v eza >/dev/null 2>&1; then
     log_ok "eza da duoc cai san, bo qua."
 elif $SUDO apt-get install -y eza >/dev/null 2>&1; then
@@ -242,7 +269,7 @@ echo ""
 #  6. CAI bat (thay the cat co syntax highlight)
 # ============================================================
 
-log_info "[6/9] Dang cai dat bat (cat co syntax highlight)..."
+log_info "[6/12] Dang cai dat bat (cat co syntax highlight)..."
 if command -v bat >/dev/null 2>&1 || command -v batcat >/dev/null 2>&1; then
     log_ok "bat da duoc cai san, bo qua."
 else
@@ -257,10 +284,118 @@ fi
 echo ""
 
 # ============================================================
-#  7. TAI THEME DRACULA CHO OH MY POSH
+#  7. CAI fd (thay the find, cu phap don gian & nhanh hon)
+#     Tren Ubuntu, goi apt ten la "fd-find" va lenh thuc thi la
+#     "fdfind" (de tranh xung dot voi goi khac ten "fd"). Script se
+#     tu tao symlink "fd" -> "fdfind" trong $HOME/.local/bin.
+#     Neu apt khong co, fallback tai binary tu GitHub release.
 # ============================================================
 
-log_info "[7/9] Dang tai theme Dracula cho Oh My Posh..."
+log_info "[7/12] Dang cai dat fd (thay the find)..."
+if command -v fd >/dev/null 2>&1; then
+    log_ok "fd da duoc cai san, bo qua."
+elif command -v fdfind >/dev/null 2>&1; then
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
+    log_ok "Hoan tat (da tao symlink fd -> fdfind co san)."
+elif $SUDO apt-get install -y fd-find >/dev/null 2>&1 && command -v fdfind >/dev/null 2>&1; then
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
+    log_ok "Hoan tat (cai qua apt goi fd-find, tao symlink fd -> fdfind)."
+elif [[ -n "$FD_ARCH" ]]; then
+    log_warn "      -> Khong co san qua apt. Dang tai binary rieng cho $ARCH_RAW..."
+    TMP_FD_DIR="$(mktemp -d)"
+    FD_URL="$(fetch_latest_asset_url "sharkdp/fd" "${FD_ARCH}\.tar\.gz")"
+    if [[ -n "$FD_URL" ]] && curl -fsSL -o "$TMP_FD_DIR/fd.tar.gz" "$FD_URL" && \
+       tar -xzf "$TMP_FD_DIR/fd.tar.gz" -C "$TMP_FD_DIR"; then
+        mkdir -p "$HOME/.local/bin"
+        FOUND_FD_BIN="$(find "$TMP_FD_DIR" -type f -name "fd" | head -n1)"
+        if [[ -n "$FOUND_FD_BIN" ]]; then
+            install -m 755 "$FOUND_FD_BIN" "$HOME/.local/bin/fd"
+            log_ok "Hoan tat (tai binary $FD_ARCH tu GitHub)."
+        else
+            log_err "      -> Khong tim thay file binary fd sau khi giai nen. Bo qua fd."
+        fi
+    else
+        log_warn "      -> Khong tai duoc binary fd cho $ARCH_RAW. Bo qua fd (khong bat buoc)."
+    fi
+    rm -rf "$TMP_FD_DIR"
+else
+    log_warn "      -> Khong xac dinh duoc kien truc CPU de tai binary. Bo qua fd (khong bat buoc)."
+fi
+export PATH="$HOME/.local/bin:$PATH"
+echo ""
+
+# ============================================================
+#  8. CAI btop (thay the top, giao dien giam sat he thong)
+# ============================================================
+
+log_info "[8/12] Dang cai dat btop (thay the top)..."
+if command -v btop >/dev/null 2>&1; then
+    log_ok "btop da duoc cai san, bo qua."
+elif $SUDO apt-get install -y btop >/dev/null 2>&1; then
+    log_ok "Hoan tat (cai qua apt)."
+elif [[ -n "$BTOP_ARCH" ]]; then
+    log_warn "      -> Khong co san qua apt. Dang tai binary rieng cho $ARCH_RAW..."
+    TMP_BTOP_DIR="$(mktemp -d)"
+    BTOP_URL="$(fetch_latest_asset_url "aristocratos/btop" "${BTOP_ARCH}\.tbz")"
+    if [[ -n "$BTOP_URL" ]] && curl -fsSL -o "$TMP_BTOP_DIR/btop.tbz" "$BTOP_URL" && \
+       tar -xjf "$TMP_BTOP_DIR/btop.tbz" -C "$TMP_BTOP_DIR"; then
+        mkdir -p "$HOME/.local/bin"
+        FOUND_BTOP_BIN="$(find "$TMP_BTOP_DIR" -type f -name "btop" | head -n1)"
+        if [[ -n "$FOUND_BTOP_BIN" ]]; then
+            install -m 755 "$FOUND_BTOP_BIN" "$HOME/.local/bin/btop"
+            log_ok "Hoan tat (tai binary $BTOP_ARCH tu GitHub)."
+        else
+            log_err "      -> Khong tim thay file binary btop sau khi giai nen. Bo qua btop."
+        fi
+    else
+        log_warn "      -> Khong tai duoc binary btop cho $ARCH_RAW. Bo qua btop (khong bat buoc)."
+    fi
+    rm -rf "$TMP_BTOP_DIR"
+else
+    log_warn "      -> Khong xac dinh duoc kien truc CPU de tai binary. Bo qua btop (khong bat buoc)."
+fi
+export PATH="$HOME/.local/bin:$PATH"
+echo ""
+
+# ============================================================
+#  9. CAI lazygit (TUI quan ly Git truc quan)
+#     Goi nay khong co san qua apt mac dinh, luon tai binary
+#     tu GitHub release dung kien truc CPU.
+# ============================================================
+
+log_info "[9/12] Dang cai dat lazygit (TUI quan ly Git)..."
+if command -v lazygit >/dev/null 2>&1; then
+    log_ok "lazygit da duoc cai san, bo qua."
+elif [[ -n "$LAZYGIT_ARCH" ]]; then
+    TMP_LG_DIR="$(mktemp -d)"
+    LG_URL="$(fetch_latest_asset_url "jesseduffield/lazygit" "${LAZYGIT_ARCH}\.tar\.gz")"
+    if [[ -n "$LG_URL" ]] && curl -fsSL -o "$TMP_LG_DIR/lazygit.tar.gz" "$LG_URL" && \
+       tar -xzf "$TMP_LG_DIR/lazygit.tar.gz" -C "$TMP_LG_DIR"; then
+        mkdir -p "$HOME/.local/bin"
+        FOUND_LG_BIN="$(find "$TMP_LG_DIR" -type f -name "lazygit" | head -n1)"
+        if [[ -n "$FOUND_LG_BIN" ]]; then
+            install -m 755 "$FOUND_LG_BIN" "$HOME/.local/bin/lazygit"
+            log_ok "Hoan tat (tai binary $LAZYGIT_ARCH tu GitHub)."
+        else
+            log_err "      -> Khong tim thay file binary lazygit sau khi giai nen. Bo qua lazygit."
+        fi
+    else
+        log_warn "      -> Khong tai duoc binary lazygit cho $ARCH_RAW. Bo qua lazygit (khong bat buoc)."
+    fi
+    rm -rf "$TMP_LG_DIR"
+else
+    log_warn "      -> Khong xac dinh duoc kien truc CPU de tai binary. Bo qua lazygit (khong bat buoc)."
+fi
+export PATH="$HOME/.local/bin:$PATH"
+echo ""
+
+# ============================================================
+#  10. TAI THEME DRACULA CHO OH MY POSH
+# ============================================================
+
+log_info "[10/12] Dang tai theme Dracula cho Oh My Posh..."
 THEME_DIR="$HOME/.poshthemes"
 mkdir -p "$THEME_DIR"
 DRACULA_THEME_PATH="$THEME_DIR/dracula.omp.json"
@@ -273,7 +408,7 @@ fi
 echo ""
 
 # ============================================================
-#  8. CAU HINH FILE RC CHO CA ~/.bashrc VA ~/.zshrc
+#  11. CAU HINH FILE RC CHO CA ~/.bashrc VA ~/.zshrc
 #     (khong con phu thuoc vao shell hien tai nua)
 # ============================================================
 
@@ -284,7 +419,7 @@ configure_rc_file() {
     local rc_file="$1"
     local shell_name="$2"   # "bash" hoac "zsh"
 
-    log_info "[8/9] Dang cau hinh $rc_file (shell: $shell_name, theme: Dracula)..."
+    log_info "[11/12] Dang cau hinh $rc_file (shell: $shell_name, theme: Dracula)..."
 
     touch "$rc_file"
     local backup_path="${rc_file}.backup_$(date +%Y%m%d_%H%M%S)"
@@ -322,16 +457,37 @@ fi
 # --- fzf (fuzzy finder: Ctrl+T tim file, Ctrl+R tim lich su lenh) ---
 [[ -f "\$HOME/.fzf.${shell_name}" ]] && source "\$HOME/.fzf.${shell_name}"
 
-# --- Alias tien ich ---
+# --- Alias tien ich: ls -> eza ---
 if command -v eza >/dev/null 2>&1; then
-    alias ls='eza --icons'
-    alias ll='eza -la --icons'
+    alias ls='eza --icons --group-directories-first'
+    alias ll='eza -la --icons --group-directories-first --header'
+    alias lt='eza --tree --icons --level=2'
 fi
+
+# --- Alias tien ich: cat -> batcat/bat ---
 if command -v batcat >/dev/null 2>&1; then
-    alias cat='batcat'
+    alias cat='batcat --paging=never'
 elif command -v bat >/dev/null 2>&1; then
-    alias cat='bat'
+    alias cat='bat --paging=never'
 fi
+
+# --- Alias tien ich: find -> fd ---
+if command -v fd >/dev/null 2>&1; then
+    alias find='fd'
+elif command -v fdfind >/dev/null 2>&1; then
+    alias find='fdfind'
+fi
+
+# --- Alias tien ich: top -> btop ---
+if command -v btop >/dev/null 2>&1; then
+    alias top='btop'
+fi
+
+# --- Alias tien ich: lazygit ---
+if command -v lazygit >/dev/null 2>&1; then
+    alias lg='lazygit'
+fi
+
 alias ..='cd ..'
 alias ...='cd ../..'
 
@@ -356,14 +512,14 @@ fi
 echo ""
 
 # ============================================================
-#  9. DONG BO CAU HINH CONG CU (nvm/pyenv/sdkman/cargo/go/rbenv/...)
+#  12. DONG BO CAU HINH CONG CU (nvm/pyenv/sdkman/cargo/go/rbenv/...)
 #     GIUA ~/.bashrc VA ~/.zshrc
 #     - Chi dong bo cac dong NAM NGOAI block AIO ben tren (block do
 #       tool khac tu ghi vao, vi du nvm/pyenv installer).
 #     - Sao chep dong nao thieu ben kia, khong xoa/ghi de gi ca.
 # ============================================================
 
-log_info "[9/9] Dang dong bo cau hinh cong cu (nvm/pyenv/sdkman/cargo/go/rbenv...) giua bashrc va zshrc..."
+log_info "[12/12] Dang dong bo cau hinh cong cu (nvm/pyenv/sdkman/cargo/go/rbenv...) giua bashrc va zshrc..."
 
 if [[ "$HAS_ZSH" -eq 1 ]]; then
     # Cac pattern nhan dien dong cau hinh cua tool quen thuoc
@@ -441,4 +597,9 @@ log_warn "GOI Y SU DUNG NHANH:"
 echo -e "${WHITE}  - Ctrl+R : tim lich su lenh bang fuzzy search (fzf)${NC}"
 echo -e "${WHITE}  - Ctrl+T : tim file bang fuzzy search (fzf)${NC}"
 echo -e "${WHITE}  - z ten-thu-muc : nhay nhanh toi thu muc da tung vao (zoxide)${NC}"
+echo -e "${WHITE}  - ls / ll / lt : liet ke file/thu muc bang eza (icon, cay thu muc)${NC}"
+echo -e "${WHITE}  - cat ten-file : xem file voi syntax highlight bang bat/batcat${NC}"
+echo -e "${WHITE}  - find ten     : tim file/thu muc nhanh bang fd${NC}"
+echo -e "${WHITE}  - top          : mo trinh giam sat he thong bang btop${NC}"
+echo -e "${WHITE}  - lg           : mo lazygit (TUI quan ly Git) trong thu muc hien tai${NC}"
 echo ""
