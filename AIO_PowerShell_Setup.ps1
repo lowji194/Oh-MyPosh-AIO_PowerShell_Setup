@@ -4,7 +4,7 @@
     Script cai dat AIO (All-In-One) lam dep PowerShell 7 + Windows Terminal
 .DESCRIPTION
     Tu dong cai dat va cau hinh:
-    - Oh My Posh (theme prompt mac dinh: Dracula)
+    - Oh My Posh (theme prompt mac dinh: Dracula, load THEME LOCAL, khong can mang)
     - Nerd Font (CascadiaCode)
     - PSReadLine (autocomplete + syntax highlight)
     - Terminal-Icons (icon cho file/folder)
@@ -15,6 +15,7 @@
     - File $PROFILE hoan chinh
 .NOTES
     Chay script nay bang PowerShell 7 (pwsh.exe), voi quyen Administrator de winget hoat dong on dinh.
+    Viet Boi Loi Nguyen - lowji194.github.io.vn
 #>
 
 # ============================================================
@@ -64,6 +65,23 @@ Write-Host ""
 
 # Refresh PATH trong session hien tai de nhan lenh moi cai
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+
+# --- Thiet lap bien moi truong POSH_THEMES_PATH (vinh vien, cho user hien tai) ---
+# De oh-my-posh luon load theme TU O CUNG (local), khong can tai qua mang moi lan mo terminal
+Write-Host "      Dang thiet lap POSH_THEMES_PATH (theme local)..." -ForegroundColor Green
+try {
+    $poshThemesPath = Join-Path $env:LOCALAPPDATA "Programs\oh-my-posh\themes"
+    if (Test-Path $poshThemesPath) {
+        [Environment]::SetEnvironmentVariable("POSH_THEMES_PATH", $poshThemesPath, "User")
+        $env:POSH_THEMES_PATH = $poshThemesPath
+        Write-Host "      -> Da set POSH_THEMES_PATH = $poshThemesPath" -ForegroundColor DarkGreen
+    } else {
+        Write-Host "      -> Chua tim thay thu muc theme tai $poshThemesPath (se thu lai sau khi mo terminal moi)." -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "      -> Loi khi set POSH_THEMES_PATH: $_" -ForegroundColor Red
+}
+Write-Host ""
 
 # ============================================================
 #  2. CAI NERD FONT
@@ -214,13 +232,27 @@ $profileContent = @'
 #  POWERSHELL PROFILE - AUTO GENERATED
 # ============================================================
 
-# --- Oh My Posh (theme prompt: Dracula) ---
+# --- Oh My Posh (theme prompt: Dracula, uu tien load LOCAL) ---
 if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
-    $draculaTheme = Join-Path $env:POSH_THEMES_PATH "dracula.omp.json"
-    if ($env:POSH_THEMES_PATH -and (Test-Path $draculaTheme)) {
+
+    # Neu POSH_THEMES_PATH chua duoc set trong session nay, thu tu suy ra tu duong dan cai dat mac dinh
+    if (-not $env:POSH_THEMES_PATH) {
+        $fallbackThemesPath = Join-Path $env:LOCALAPPDATA "Programs\oh-my-posh\themes"
+        if (Test-Path $fallbackThemesPath) {
+            $env:POSH_THEMES_PATH = $fallbackThemesPath
+        }
+    }
+
+    $draculaTheme = $null
+    if ($env:POSH_THEMES_PATH) {
+        $draculaTheme = Join-Path $env:POSH_THEMES_PATH "dracula.omp.json"
+    }
+
+    if ($draculaTheme -and (Test-Path $draculaTheme)) {
+        # Load theme LOCAL - khong can mang, nhanh hon
         oh-my-posh init pwsh --config $draculaTheme | Invoke-Expression
     } else {
-        # Fallback: neu chua tim thay theme Dracula cuc bo, tai truc tiep tu repo chinh thuc
+        # Fallback: chi tai qua mang neu khong tim thay theme local
         oh-my-posh init pwsh --config "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/dracula.omp.json" | Invoke-Expression
     }
 }
@@ -267,7 +299,7 @@ Set-Alias ll Get-ChildItem
 function .. { Set-Location .. }
 function ... { Set-Location ..\.. }
 
-Write-Host "Profile da tai xong (theme: Dracula). Go 'oh-my-posh init pwsh --list-themes' de xem cac theme khac." -ForegroundColor DarkGray
+Write-Host "Viet Boi Loi Nguyen - lowji194.github.io.vn" -ForegroundColor DarkGray
 '@
 
 Set-Content -Path $PROFILE -Value $profileContent -Encoding UTF8
