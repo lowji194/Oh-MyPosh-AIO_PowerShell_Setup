@@ -12,7 +12,7 @@
     - posh-git (trang thai Git tren prompt + tab-completion)
     - PSFzf (fuzzy finder cho lich su lenh & file)
     - (Tuy chon) ImportExcel, Pester, PSScriptAnalyzer, SecretManagement, BurntToast
-    - File $PROFILE hoan chinh
+    - File $PROFILE hoan chinh, kem lenh nhanh doi theme (theme / themes)
 .NOTES
     Chay script nay bang PowerShell 7 (pwsh.exe), voi quyen Administrator de winget hoat dong on dinh.
     Viet Boi Loi Nguyen - lowji194.github.io.vn
@@ -232,7 +232,12 @@ $profileContent = @'
 #  POWERSHELL PROFILE - AUTO GENERATED
 # ============================================================
 
-# --- Oh My Posh (theme prompt: Dracula, uu tien load LOCAL) ---
+# --- Bien luu ten theme dang dung (mac dinh: dracula) ---
+if (-not (Test-Path Env:\POSH_CURRENT_THEME)) {
+    $env:POSH_CURRENT_THEME = "dracula"
+}
+
+# --- Oh My Posh (theme prompt, uu tien load LOCAL) ---
 if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
 
     # Neu POSH_THEMES_PATH chua duoc set trong session nay, thu tu suy ra tu duong dan cai dat mac dinh
@@ -243,14 +248,14 @@ if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
         }
     }
 
-    $draculaTheme = $null
+    $currentThemeFile = $null
     if ($env:POSH_THEMES_PATH) {
-        $draculaTheme = Join-Path $env:POSH_THEMES_PATH "dracula.omp.json"
+        $currentThemeFile = Join-Path $env:POSH_THEMES_PATH "$($env:POSH_CURRENT_THEME).omp.json"
     }
 
-    if ($draculaTheme -and (Test-Path $draculaTheme)) {
+    if ($currentThemeFile -and (Test-Path $currentThemeFile)) {
         # Load theme LOCAL - khong can mang, nhanh hon
-        oh-my-posh init pwsh --config $draculaTheme | Invoke-Expression
+        oh-my-posh init pwsh --config $currentThemeFile | Invoke-Expression
     } else {
         # Fallback: chi tai qua mang neu khong tim thay theme local
         oh-my-posh init pwsh --config "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/dracula.omp.json" | Invoke-Expression
@@ -299,6 +304,78 @@ Set-Alias ll Get-ChildItem
 function .. { Set-Location .. }
 function ... { Set-Location ..\.. }
 
+# ============================================================
+#  LENH NHANH DOI THEME OH MY POSH
+# ============================================================
+
+# Liet ke danh sach ten theme dang co (khong preview, chi liet ke nhanh)
+function Get-ThemeList {
+    if (-not $env:POSH_THEMES_PATH -or -not (Test-Path $env:POSH_THEMES_PATH)) {
+        Write-Host "Khong tim thay thu muc theme. Kiem tra bien POSH_THEMES_PATH." -ForegroundColor Red
+        return
+    }
+    Get-ChildItem -Path $env:POSH_THEMES_PATH -Filter '*.omp.json' |
+        Sort-Object BaseName |
+        ForEach-Object { ($_.BaseName -replace '\.omp$', '') }
+}
+
+# Xem truoc TAT CA theme ngay trong terminal (in mau thuc te tung theme)
+function Show-Themes {
+    if (-not $env:POSH_THEMES_PATH -or -not (Test-Path $env:POSH_THEMES_PATH)) {
+        Write-Host "Khong tim thay thu muc theme. Kiem tra bien POSH_THEMES_PATH." -ForegroundColor Red
+        return
+    }
+    Get-ChildItem -Path $env:POSH_THEMES_PATH -Filter '*.omp.json' | Sort-Object BaseName | ForEach-Object {
+        Write-Host "`n$($_.BaseName -replace '\.omp$','')" -ForegroundColor Cyan
+        oh-my-posh print primary --config $_.FullName
+    }
+    Write-Host "`nDung lenh: theme <ten-theme>  de doi theme (vi du: theme jandedobbeleer)" -ForegroundColor DarkGray
+}
+
+# Doi theme ngay lap tuc + luu lai vinh vien cho lan mo terminal sau
+function Set-PoshThemeQuick {
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [string]$Name
+    )
+
+    if (-not $env:POSH_THEMES_PATH -or -not (Test-Path $env:POSH_THEMES_PATH)) {
+        Write-Host "Khong tim thay thu muc theme. Kiem tra bien POSH_THEMES_PATH." -ForegroundColor Red
+        return
+    }
+
+    $themeFile = Join-Path $env:POSH_THEMES_PATH "$Name.omp.json"
+    if (-not (Test-Path $themeFile)) {
+        Write-Host "Khong tim thay theme '$Name'." -ForegroundColor Red
+        Write-Host "Go 'themes' de xem danh sach va preview cac theme dang co." -ForegroundColor Yellow
+        return
+    }
+
+    # Ap dung ngay cho session hien tai
+    oh-my-posh init pwsh --config $themeFile | Invoke-Expression
+    $env:POSH_CURRENT_THEME = $Name
+
+    # Luu lai vinh vien (bien User) de lan sau mo terminal tu dong dung theme nay
+    [Environment]::SetEnvironmentVariable("POSH_CURRENT_THEME", $Name, "User")
+
+    Write-Host "Da doi sang theme: $Name (da luu, lan sau mo terminal se tu dong dung theme nay)" -ForegroundColor Green
+}
+
+# Alias ngan gon
+Set-Alias theme Set-PoshThemeQuick
+Set-Alias themes Show-Themes
+
+# Tab-completion cho lenh "theme": go "theme " roi nhan Tab de goi y ten theme
+Register-ArgumentCompleter -CommandName Set-PoshThemeQuick -ParameterName Name -ScriptBlock {
+    param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameters)
+    if ($env:POSH_THEMES_PATH -and (Test-Path $env:POSH_THEMES_PATH)) {
+        Get-ChildItem -Path $env:POSH_THEMES_PATH -Filter "$wordToComplete*.omp.json" |
+            ForEach-Object { ($_.BaseName -replace '\.omp$', '') } |
+            Sort-Object |
+            ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
+    }
+}
+
 Write-Host "Viet Boi Loi Nguyen - lowji194.github.io.vn" -ForegroundColor DarkGray
 '@
 
@@ -319,12 +396,12 @@ Write-Host "CAC BUOC TIEP THEO (BAT BUOC):" -ForegroundColor Yellow
 Write-Host "  1. Dong terminal nay va mo lai PowerShell 7 (pwsh)." -ForegroundColor White
 Write-Host "  2. Mo Windows Terminal > Settings > Profile PowerShell > Appearance" -ForegroundColor White
 Write-Host "     -> Doi Font face thanh: CaskaydiaCove Nerd Font" -ForegroundColor White
-Write-Host "  3. (Tuy chon) Neu muon doi theme khac Dracula, sua dong 'dracula.omp.json'" -ForegroundColor White
-Write-Host "     trong file profile ($PROFILE) sang theme khac." -ForegroundColor White
-Write-Host "     Xem danh sach theme: https://ohmyposh.dev/docs/themes" -ForegroundColor White
 Write-Host ""
 Write-Host "GOI Y SU DUNG NHANH:" -ForegroundColor Yellow
-Write-Host "  - Ctrl+R : tim lich su lenh bang fuzzy search (PSFzf)" -ForegroundColor White
-Write-Host "  - Ctrl+T : tim file bang fuzzy search (PSFzf)" -ForegroundColor White
-Write-Host "  - z ten-thu-muc : nhay nhanh toi thu muc da tung vao (zoxide)" -ForegroundColor White
+Write-Host "  - Ctrl+R          : tim lich su lenh bang fuzzy search (PSFzf)" -ForegroundColor White
+Write-Host "  - Ctrl+T          : tim file bang fuzzy search (PSFzf)" -ForegroundColor White
+Write-Host "  - z ten-thu-muc   : nhay nhanh toi thu muc da tung vao (zoxide)" -ForegroundColor White
+Write-Host "  - themes          : xem truoc TAT CA theme ngay trong terminal" -ForegroundColor White
+Write-Host "  - theme <ten>     : doi theme ngay lap tuc + tu luu lai (vi du: theme jandedobbeleer)" -ForegroundColor White
+Write-Host "                      Go 'theme ' roi nhan Tab de tab-completion goi y ten theme" -ForegroundColor White
 Write-Host ""
