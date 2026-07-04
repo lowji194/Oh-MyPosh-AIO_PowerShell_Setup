@@ -63,8 +63,6 @@ try {
 }
 Write-Host ""
 
-# Refresh PATH trong session hien tai de nhan lenh moi cai
-$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 
 # --- Thiet lap bien moi truong POSH_THEMES_PATH (vinh vien, cho user hien tai) ---
 # De oh-my-posh luon load theme TU O CUNG (local), khong can tai qua mang moi lan mo terminal
